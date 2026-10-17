@@ -5,7 +5,6 @@
 
 # Temporary runs and generated data
 /work/
-/infra/volumes/
 /experiments/raw/
 
 # Java and frontend build outputs

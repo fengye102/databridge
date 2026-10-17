@@ -15,7 +15,8 @@
 |---|---|
 | `backend/` | Spring Boot 后端源码、单元测试和后端构建文件 |
 | `frontend/` | Vue 管理界面源码和前端构建文件；核心链路通过后再创建 |
-| `infra/` | Docker Compose、数据库初始化脚本和固定版本配置 |
+| `infra/` | Docker Compose、数据库初始化脚本、示例环境变量和固定镜像版本配置 |
+| `infra/mysql/init/` | MySQL 首次初始化时执行的最小 SQL 脚本；改动只影响新建数据卷，旧卷需显式迁移 |
 | `tests/fixtures/` | 小而确定的 SQL 测试数据及故障注入脚本 |
 | `experiments/` | 可复现的实验脚本、参数和已整理的结果；不放大体量原始数据 |
 | `experiments/raw/` | 可重新生成的大体量实验原始数据；不纳入版本控制，汇总后清理 |
@@ -23,12 +24,12 @@
 | `docs/superpowers/specs/` | 经确认的模块设计与验收标准 |
 | `docs/superpowers/plans/` | 与设计一一对应的实施计划 |
 | `work/` | 可删除的运行日志、临时导出和实验中间文件；不作为交付物 |
-| `infra/volumes/` | 本地数据库容器卷；不纳入版本控制，清理前先备份所需数据 |
 
 - 文档用小写 kebab-case 文件名，版本写在文件名中，例如 `databridge-proposal-v3.md`。
 - Java 包名使用 `com.databridge`；类名用 PascalCase，方法和变量用 camelCase。
 - 数据库表、列、索引使用 snake_case；元数据放在 PostgreSQL 的 `databridge_meta` schema，业务表放在独立业务 schema。
 - 新增目录前，先在本节写明用途、命名和清理方式。
+- 开发数据库使用 Docker 命名卷，不把数据库主数据目录绑定到 Windows 工作区；Docker Desktop 的 WSL 数据根目录位于 `D:\Dev Tools Manager\Docker Data`。`docker compose down` 保留数据，执行 `down -v` 前必须明确确认并备份需要的数据。
 
 ## 3. 正确性约束
 
@@ -47,14 +48,15 @@
 - 版本号在首次集成验证后固定；以项目文件记录 Java、Spring Boot、Debezium、MySQL、PostgreSQL 的实际版本。
 - 每项实现必须给出可重复的验证命令和结果；未运行的测试不得写成“已通过”。
 - 数据库密码和连接串通过环境变量或本地未跟踪配置注入，不提交真实凭据。
+- 本地双库环境仅用于开发：MySQL 主机端口 `127.0.0.1:3307`，PostgreSQL 主机端口 `127.0.0.1:5433`；固定补丁版本镜像，MySQL 启用 ROW/FULL Binlog。真实密码写入未跟踪的 `infra/.env`，仓库只保留 `infra/.env.example`。
 
 ## 5. 清理与保留
 
 - `work/` 下只放临时产物。清理前核对目标绝对路径处于项目工作区内；不要对计算出的未知路径执行递归删除。
-- `experiments/` 保留脚本、参数、汇总 CSV、图表和说明；百万行生成数据、数据库卷和日志不纳入版本控制。
+- `experiments/` 保留脚本、参数、汇总 CSV、图表和说明；百万行生成数据、Docker 命名卷和日志不纳入版本控制。
 - 原始选题文档、经确认的设计、测试样本及论文所需实验结果保留，不以“整理目录”为由覆盖或删除。
 
 ## 6. 当前状态
 
 - 原始文档为项目根目录的 `基于_Spring_Boot_的异构数据库迁移与增量同步平台的设计与实现_v2.md`。
-- 此目录在建立本规则时尚未初始化 Git 仓库；后续若初始化，需先确认忽略规则和现有文件。
+- 已建立公开 Git 仓库 `fengye102/databridge`；核心链路设计仍待书面确认。2026-10-18 用户确认先搭建并使用 Docker 双库开发环境，不代表核心同步实现已获确认。
