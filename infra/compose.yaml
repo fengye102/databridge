@@ -37,7 +37,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?missing_POSTGRES_PASSWORD}
       TZ: UTC
     ports:
-      - "127.0.0.1:5433:5432"
+      - "127.0.0.1:15433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

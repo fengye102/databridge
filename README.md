@@ -18,7 +18,7 @@
 
 ## 本地开发数据库
 
-环境使用 MySQL 8.4.11 和 PostgreSQL 17.11，分别只映射到 Windows 的 `127.0.0.1:3307`、`127.0.0.1:5433`。MySQL 开启 7 天保留的 ROW/FULL Binlog，并给 `databridge` 用户授予后续 CDC 所需权限。数据库数据保存在 Docker 命名卷内；本机 Docker Desktop 的 WSL 数据盘位于 `D:\Dev Tools Manager\Docker Data`。
+环境使用 MySQL 8.4.11 和 PostgreSQL 17.11，分别只映射到 Windows 的 `127.0.0.1:3307`、`127.0.0.1:15433`。MySQL 开启 7 天保留的 ROW/FULL Binlog，并给 `databridge` 用户授予后续 CDC 所需权限。数据库数据保存在 Docker 命名卷内；本机 Docker Desktop 的 WSL 数据盘位于 `D:\Dev Tools Manager\Docker Data`。PostgreSQL 使用 15433 是因为 Windows 重启后动态保留了原先的 5433 端口。
 
 此机器已生成未跟踪的 `infra/.env`。新机器需要复制 `infra/.env.example` 到 `infra/.env`，把三个占位值换成不同的随机密码后再启动。不要提交该文件或在命令行中直接输出密码。
 
@@ -32,7 +32,7 @@ $env:PATH = "$(Split-Path $docker);$env:PATH"
 & 'D:\Dev Tools Manager\7\pwsh.exe' -NoProfile -File "$repo\infra\verify.ps1"
 ```
 
-MySQL 连接：`127.0.0.1:3307`，库 `databridge_source`，用户 `databridge`，密码为 `infra/.env` 的 `MYSQL_PASSWORD`；该用户只读源库，另有 CDC 所需的复制权限。PostgreSQL 连接：`127.0.0.1:5433`，库 `databridge_target`，用户 `databridge`，密码为 `POSTGRES_PASSWORD`。两个库目前没有业务表。
+MySQL 连接：`127.0.0.1:3307`，库 `databridge_source`，用户 `databridge`，密码为 `infra/.env` 的 `MYSQL_PASSWORD`；该用户只读源库，另有 CDC 所需的复制权限。PostgreSQL 连接：`127.0.0.1:15433`，库 `databridge_target`，用户 `databridge`，密码为 `POSTGRES_PASSWORD`。两个库目前没有业务表。
 
 停止环境但保留数据：
 

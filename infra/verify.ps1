@@ -42,7 +42,7 @@ $pgQuery = 'PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U "$POSTGRES_USER
 $pgVersion = @(Invoke-Docker ($compose + @('exec', '-T', 'postgres', 'sh', '-lc', $pgQuery)))[0]
 if (-not $pgVersion.StartsWith('17.11')) { throw "Unexpected PostgreSQL version: $pgVersion" }
 
-foreach ($port in 3307, 5433) {
+foreach ($port in 3307, 15433) {
     $client = [System.Net.Sockets.TcpClient]::new()
     try { $client.Connect('127.0.0.1', $port) }
     catch { throw "TCP 127.0.0.1:$port is unavailable: $($_.Exception.Message)" }
@@ -56,4 +56,4 @@ if (-not (Test-Path -LiteralPath 'D:\Dev Tools Manager\Docker Data\main\ext4.vhd
     throw 'Docker WSL data disk not found on D:'
 }
 
-"PASS: MySQL $($mysqlFields[0]) ROW/FULL Binlog, PostgreSQL $pgVersion, both healthy, loopback ports 3307/5433, named volumes on D:"
+"PASS: MySQL $($mysqlFields[0]) ROW/FULL Binlog, PostgreSQL $pgVersion, both healthy, loopback ports 3307/15433, named volumes on D:"

@@ -48,7 +48,7 @@
 - 版本号在首次集成验证后固定；以项目文件记录 Java、Spring Boot、Debezium、MySQL、PostgreSQL 的实际版本。
 - 每项实现必须给出可重复的验证命令和结果；未运行的测试不得写成“已通过”。
 - 数据库密码和连接串通过环境变量或本地未跟踪配置注入，不提交真实凭据。
-- 本地双库环境仅用于开发：MySQL 主机端口 `127.0.0.1:3307`，PostgreSQL 主机端口 `127.0.0.1:5433`；固定补丁版本镜像，MySQL 启用 ROW/FULL Binlog。真实密码写入未跟踪的 `infra/.env`，仓库只保留 `infra/.env.example`。
+- 本地双库环境仅用于开发：MySQL 主机端口 `127.0.0.1:3307`，PostgreSQL 主机端口 `127.0.0.1:15433`；固定补丁版本镜像，MySQL 启用 ROW/FULL Binlog。真实密码写入未跟踪的 `infra/.env`，仓库只保留 `infra/.env.example`。Windows 的动态保留端口可能覆盖 5433，因此 PostgreSQL 改用 15433；调整端口前先检查 `netsh interface ipv4 show excludedportrange protocol=tcp`。
 
 ## 5. 清理与保留
 

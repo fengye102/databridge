@@ -45,3 +45,10 @@
 - MySQL 报告 `8.4.11 / log_bin=1 / ROW / FULL / 604800`，PostgreSQL 报告 `17.11`；两个本地端口连通。
 - 在两库写入临时标记后执行 `docker compose down` 和 `up --wait`，标记仍在；已删除临时标记表。
 - 最后一次 `infra/verify.ps1` 输出 `PASS`；提交前还要重新运行完整验证。
+
+## Windows 完整重启后的端口修正（2026-10-18）
+
+- 完整重启后，Windows 不再提示待重启；WSL2 与 Docker Engine 可正常启动。
+- Windows 的 TCP 保留端口范围 `5358–5457` 覆盖原 PostgreSQL 主机端口 `5433`；容器健康但端口未发布，重建容器时报绑定权限错误。
+- 先更新项目规则和环境设计，再将 PostgreSQL 主机端口改为 `15433`。不删除数据库命名卷。
+- `docker compose config --quiet` 与 `infra/verify.ps1` 均通过；MySQL、PostgreSQL 都健康，Windows 回环地址端口 `3307/15433` 可连接。
