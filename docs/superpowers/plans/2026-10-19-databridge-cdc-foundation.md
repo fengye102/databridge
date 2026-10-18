@@ -41,10 +41,10 @@
 
 ### Task 1: 构建骨架与事件表
 
-- [ ] 先创建可执行测试的最小 `pom.xml`，锁定上述版本及 JUnit/Testcontainers/Flyway 依赖；运行 `mvn test`，确认工程基线可构建。
-- [ ] 写 `SchemaMigrationIT`：空 PostgreSQL 执行 Flyway 后存在 `databridge_meta.cdc_event`，`(task_id,event_key)` 唯一，`sequence` 单调递增；运行测试，观察缺少迁移脚本而失败。
-- [ ] 创建 Maven 工程、Boot 入口和 `V1__cdc_event.sql`；事件列为 `sequence BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY`、`task_id UUID NOT NULL`、`event_key CHAR(64) NOT NULL`、`source_partition JSONB NOT NULL`、`source_offset JSONB NOT NULL`、`table_name TEXT NOT NULL`、`operation CHAR(1) NOT NULL`、`row_id BIGINT NOT NULL`、`after_row JSONB`、`captured_at TIMESTAMPTZ NOT NULL DEFAULT now()`。
-- [ ] 跑 `mvn test` 和单项 IT；确认 migration 可重复执行且错误 schema 不会静默通过。
+- [x] 先创建可执行测试的最小 `pom.xml`，锁定上述版本及 JUnit/Testcontainers/Flyway 依赖；运行 `mvn test`，确认工程基线可构建。
+- [x] 写 `SchemaMigrationIT`：空 PostgreSQL 执行 Flyway 后存在 `databridge_meta.cdc_event`，`(task_id,event_key)` 唯一，`sequence` 单调递增；运行测试，观察缺少迁移脚本而失败。
+- [x] 创建 Maven 工程、Boot 入口和 `V1__cdc_event.sql`；事件列为 `sequence BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY`、`task_id UUID NOT NULL`、`event_key CHAR(64) NOT NULL`、`source_partition JSONB NOT NULL`、`source_offset JSONB NOT NULL`、`table_name TEXT NOT NULL`、`operation CHAR(1) NOT NULL`、`row_id BIGINT NOT NULL`、`after_row JSONB`、`captured_at TIMESTAMPTZ NOT NULL DEFAULT now()`。
+- [x] 跑 `mvn test` 和单项 IT；确认空库 migration、事件键唯一约束与递增序列通过。
 
 ### Task 2: 事件身份、映射和入库
 
