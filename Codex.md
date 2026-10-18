@@ -14,6 +14,11 @@
 | 路径 | 内容 |
 |---|---|
 | `backend/` | Spring Boot 后端源码、单元测试和后端构建文件 |
+| `backend/src/main/java/com/databridge/` | 后端 Java 代码；按 `cdc/`、`task/`、`copy/`、`verify/` 业务责任分包，不按 controller/service/repository 全局分层 |
+| `backend/src/main/resources/db/migration/` | PostgreSQL 元数据迁移脚本，使用 Flyway `V<序号>__<snake_case>.sql` 命名；只追加新版本，不改已经运行过的版本 |
+| `backend/src/test/java/com/databridge/` | 对应生产包的单元与集成测试；集成测试用 `*IT.java` 命名 |
+| `backend/target/` | Maven 构建输出，不纳入版本控制；可由 `mvn clean` 重建 |
+| `backend/*.ps1` | 本地开发与验证入口；脚本只读未跟踪凭据，不输出密码 |
 | `frontend/` | Vue 管理界面源码和前端构建文件；核心链路通过后再创建 |
 | `infra/` | Docker Compose、数据库初始化脚本、示例环境变量和固定镜像版本配置 |
 | `infra/mysql/init/` | MySQL 首次初始化时执行的最小 SQL 脚本；改动只影响新建数据卷，旧卷需显式迁移 |
@@ -59,4 +64,4 @@
 ## 6. 当前状态
 
 - 原始文档为项目根目录的 `基于_Spring_Boot_的异构数据库迁移与增量同步平台的设计与实现_v2.md`。
-- 已建立公开 Git 仓库 `fengye102/databridge`；核心链路设计仍待书面确认。2026-10-18 用户确认先搭建并使用 Docker 双库开发环境，不代表核心同步实现已获确认。
+- 已建立公开 Git 仓库 `fengye102/databridge`；2026-10-19 用户确认开始按核心链路设计实施。先验证真实 CDC 捕获、事件持久化、去重、顺序与恢复，再进入全量迁移；前端最后开发。
