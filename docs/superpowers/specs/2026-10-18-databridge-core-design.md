@@ -58,7 +58,7 @@
 ## 6. 启动、全量与衔接时序
 
 1. 创建任务时检查 MySQL/PG 连接、表结构、源主键、目标空表、目标唯一约束和无同表运行任务。
-2. 启动 `CdcCapture`，等待 Debezium 初始 `no_data` schema 快照完成并进入 Binlog 捕获阶段，确认 offset/schema-history 可持久化，再进入 `COPYING`。启动 Engine 对象本身不视为就绪；集成测试使用快照完成通知或等效可观测状态验证就绪。[Debezium 快照通知](https://debezium.io/documentation/reference/stable/configuration/notification.html)
+2. 启动 `CdcCapture`，等待 Debezium 初始 `no_data` schema 快照 `COMPLETED`（恢复时可能 `SKIPPED`）通知。真实双库测试证明新任务此时 JDBC offset 表仍为空，故不能立刻复制。每任务唯一 `topic.prefix` 的 Engine 同时捕获业务表和源库预置 `sync_probe(id BIGINT AUTO_INCREMENT PRIMARY KEY, marker CHAR(36))`；收到快照通知后，用只对该表额外有 INSERT 权限的 CDC 账号写入 UUID 标记，等待本任务的 JDBC offset 持久化，之后才能进入 `COPYING`。探针事件同样入库，应用时只推进游标。超时、`ABORTED`、缺表/权限或 Engine 错误均失败；不以固定休眠或其他任务的 offset 代替。[Debezium 3.7 快照通知](https://debezium.io/documentation/reference/3.7/configuration/notification.html)
 3. 在 CDC 就绪后查询 `MAX(id)`，写入 `full_checkpoint.high_watermark`；空表以完成全量处理。此后插入的行即使主键落在高水位以下，也由 CDC 回放覆盖。
 4. 全量每批执行 `WHERE id > :last_id AND id <= :high_watermark ORDER BY id LIMIT :batch_size`。以**本批最后实际读取的主键**推进检查点；空结果即完成。数据写入与检查点更新在一个 PostgreSQL 事务。
 5. 全量完成标志持久化后进入 `REPLAYING`。按 `sequence > event_cursor.sequence ORDER BY sequence` 读取事件，逐批应用；每批业务写入与游标同事务提交。未知类型、损坏事件或目标写入失败时暂停应用并记录 `FAILED`，游标不越过失败事件。

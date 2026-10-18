@@ -25,6 +25,15 @@ public final class FullCopyWorker {
         this.target = java.util.Objects.requireNonNull(target);
     }
 
+    public void validateTable(CopyTable table) {
+        java.util.Objects.requireNonNull(table);
+        try (var mysql = source.getConnection(); var pg = target.getConnection()) {
+            inspectColumns(mysql, pg, table);
+        } catch (SQLException e) {
+            throw new IllegalArgumentException("Could not inspect copy table schema", e);
+        }
+    }
+
     public int copyNextBatch(UUID taskId, CopyTable table, int batchSize) {
         java.util.Objects.requireNonNull(taskId);
         java.util.Objects.requireNonNull(table);

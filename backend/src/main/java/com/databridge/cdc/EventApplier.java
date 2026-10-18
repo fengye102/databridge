@@ -44,6 +44,9 @@ public final class EventApplier {
                 }
                 List<Column> columns = inspectTarget(pg, table);
                 for (Event event : events) {
+                    if (event.tableName().equals(table.sourceSchema() + ".sync_probe")) {
+                        continue;
+                    }
                     if (!event.tableName().equals(table.sourceSchema() + "." + table.sourceTable())) {
                         throw new IllegalArgumentException("Event belongs to a different source table: "
                                 + event.tableName());

@@ -16,6 +16,7 @@
 | `backend/` | Spring Boot 后端源码、单元测试和后端构建文件 |
 | `backend/src/main/java/com/databridge/` | 后端 Java 代码；按 `cdc/`、`task/`、`copy/`、`verify/` 业务责任分包，不按 controller/service/repository 全局分层 |
 | `backend/src/main/resources/db/migration/` | PostgreSQL 元数据迁移脚本，使用 Flyway `V<序号>__<snake_case>.sql` 命名；只追加新版本，不改已经运行过的版本 |
+| `backend/src/main/resources/META-INF/services/` | Java ServiceLoader 服务声明；仅登记需要嵌入式加载的 Debezium 扩展，文件名使用接口全限定名，随源码保留，不作临时清理 |
 | `backend/src/test/java/com/databridge/` | 对应生产包的单元与集成测试；集成测试用 `*IT.java` 命名 |
 | `backend/target/` | Maven 构建输出，不纳入版本控制；可由 `mvn clean` 重建 |
 | `backend/*.ps1` | 本地开发与验证入口；脚本只读未跟踪凭据，不输出密码 |
@@ -44,6 +45,7 @@
 - CDC 事件应用和应用游标推进必须在同一个 PostgreSQL 事务内。首版保留事件记录，不依赖立即清理后的去重行为。
 - 全量开始时固定每张表的扫描主键上界，避免持续插入使扫描无界；源端主键更新、DDL 变更和无主键表在第一阶段明确拒绝。
 - 运行中出现无法映射的类型、CDC 位点丢失、binlog 被清理或顺序无法保证时，任务进入失败状态，不静默跳过事件。
+- 首次复制前必须取得本任务持久化 CDC offset。`no_data` 快照通知本身不产生 offset；源库预置 `sync_probe` 表，CDC 账号仅对其额外具有 INSERT 权限。快照完成后写入探针并等待本任务 offset 落库；探针事件入事件日志，应用器只推进游标，不写业务表。缺少探针表或权限即拒绝启动，不以固定休眠或其他任务的 offset 代替。
 - 首版时间映射固定为：MySQL `DATETIME` 按无时区墙上时间写入 PostgreSQL `timestamp without time zone`；MySQL `TIMESTAMP` 在源连接会话设为 UTC 后，按 UTC 墙上时间写入同类目标列。任务创建时须拒绝不同的目标时间列类型；未来 `RowMapper` 需让 CDC 与全量路径采用同一语义。
 - 只在源端停止写入、CDC 追平后进行确定性一致性校验；在线校验属于扩展研究。
 
@@ -66,4 +68,4 @@
 
 - 原始文档为项目根目录的 `基于_Spring_Boot_的异构数据库迁移与增量同步平台的设计与实现_v2.md`。
 - 已建立公开 Git 仓库 `fengye102/databridge`；2026-10-19 用户确认开始按核心链路设计实施。先验证真实 CDC 捕获、事件持久化、去重、顺序与恢复，再进入全量迁移；前端最后开发。
-- CDC 事件入库、FullCopyWorker 和 EventApplier 已通过真实双库贯通测试；当前尚未实现共享 RowMapper、TaskCoordinator、Verifier、TaskApi 与前端，三个组件尚未被状态机编排为可启动的完整任务。依赖版本记录：本机 JDK 23.0.2、Maven 3.9.16；后端按 Java 21 编译，Spring Boot 3.5.16、Debezium 3.7.0.Final；数据库 MySQL 8.4.11、PostgreSQL 17.11。
+- CDC 事件入库、持久就绪探针、FullCopyWorker、EventApplier 和任务创建前校验已通过真实双库测试；当前尚未实现共享 RowMapper、TaskCoordinator、Verifier、TaskApi 与前端，组件尚未被状态机编排为可启动的完整任务。依赖版本记录：本机 JDK 23.0.2、Maven 3.9.16；后端按 Java 21 编译，Spring Boot 3.5.16、Debezium 3.7.0.Final；数据库 MySQL 8.4.11、PostgreSQL 17.11。

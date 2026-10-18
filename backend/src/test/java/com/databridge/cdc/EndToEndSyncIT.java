@@ -52,10 +52,13 @@ class EndToEndSyncIT {
                 )
                 """);
         executeSource("INSERT INTO orders(id, name) VALUES (1, 'old'), (2, 'to-delete')");
+        executeSource("CREATE TABLE sync_probe (id BIGINT AUTO_INCREMENT PRIMARY KEY, "
+                + "marker CHAR(36) NOT NULL UNIQUE)");
         try (var connection = DriverManager.getConnection(mysql.getJdbcUrl(), "root", "test");
              var statement = connection.createStatement()) {
             statement.execute("CREATE USER 'capture'@'%' IDENTIFIED BY 'capturepass'");
             statement.execute("GRANT SELECT ON databridge_source.* TO 'capture'@'%'");
+            statement.execute("GRANT INSERT ON databridge_source.sync_probe TO 'capture'@'%'");
             statement.execute("""
                     GRANT RELOAD, SHOW DATABASES, REPLICATION SLAVE, REPLICATION CLIENT
                     ON *.* TO 'capture'@'%'
@@ -67,9 +70,10 @@ class EndToEndSyncIT {
         var table = new CopyTable("databridge_source", "orders", "business", "orders");
         var applier = new EventApplier(target);
         try (var capture = new CdcCapture(taskId, "databridge_source.orders",
-                settings(), new CdcEventRepository(target))) {
+                settings(), new CdcEventRepository(target),
+                new DriverManagerDataSource(mysql.getJdbcUrl(), "capture", "capturepass"))) {
             capture.start();
-            long canaryId = waitForCapturedCanary(capture, taskId);
+            capture.awaitReady(Duration.ofSeconds(30));
 
             assertEquals(1, copy.copyNextBatch(taskId, table, 1));
             assertEquals("old", targetName(1));
@@ -100,7 +104,7 @@ class EndToEndSyncIT {
             assertEquals(LocalDateTime.of(2026, 10, 19, 12, 30, 1, 123456000), targetTime(1, true));
             assertNull(targetName(2));
             assertEquals("below-watermark", targetName(3));
-            assertEquals("canary", targetName(canaryId));
+            assertTrue(probeEventCount(taskId) > 0);
             assertNull(capture.failure());
         }
     }
@@ -124,15 +128,19 @@ class EndToEndSyncIT {
         return properties;
     }
 
-    private long waitForCapturedCanary(CdcCapture capture, UUID taskId) throws Exception {
-        for (int attempt = 0; attempt < 15; attempt++) {
-            long id = 1000L + attempt;
-            executeSource("INSERT INTO orders(id, name) VALUES (" + id + ", 'canary')");
-            if (awaitCapture(capture, taskId, id, Duration.ofSeconds(2))) {
-                return id;
+    private int probeEventCount(UUID taskId) throws Exception {
+        try (var connection = DriverManager.getConnection(
+                postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+             var statement = connection.prepareStatement("""
+                     SELECT COUNT(*) FROM databridge_meta.cdc_event
+                     WHERE task_id = ? AND table_name = 'databridge_source.sync_probe'
+                     """)) {
+            statement.setObject(1, taskId);
+            try (var result = statement.executeQuery()) {
+                result.next();
+                return result.getInt(1);
             }
         }
-        throw new AssertionError("Debezium did not capture a readiness canary", capture.failure());
     }
 
     private boolean awaitCapture(CdcCapture capture, UUID taskId, long rowId, Duration timeout)

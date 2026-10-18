@@ -2,7 +2,7 @@
 
 基于 Spring Boot 的 MySQL → PostgreSQL 全量迁移与增量同步毕业设计项目。
 
-**当前阶段：本地双库环境与 CDC 基础链路已通过测试，完整迁移服务尚未完成。** 已有真实 MySQL Binlog 捕获、PostgreSQL 事件日志、去重及故障重放验证；全量迁移、事件应用、任务 API 和前端尚未实现。核心链路采用“先捕获并持久化 CDC 事件、执行 JDBC 全量、再按序回放并持续同步”，避免迟到的全量批次覆盖新事件。
+**当前阶段：CDC、全量复制、事件回放和任务创建校验已通过真实双库测试，完整任务编排尚未完成。** 核心链路采用“先捕获并持久化 CDC 事件、执行 JDBC 全量、再按序回放并持续同步”，避免迟到的全量批次覆盖新事件。任务状态机、校验报告、HTTP API 和前端仍待实现。
 
 ## 文档
 
@@ -32,7 +32,7 @@ $env:PATH = "$(Split-Path $docker);$env:PATH"
 & 'D:\Dev Tools Manager\7\pwsh.exe' -NoProfile -File "$repo\infra\verify.ps1"
 ```
 
-MySQL 连接：`127.0.0.1:3307`，库 `databridge_source`，用户 `databridge`，密码为 `infra/.env` 的 `MYSQL_PASSWORD`；该用户只读源库，另有 CDC 所需的复制权限。PostgreSQL 连接：`127.0.0.1:15433`，库 `databridge_target`，用户 `databridge`，密码为 `POSTGRES_PASSWORD`。两个库目前没有业务表。
+MySQL 连接：`127.0.0.1:3307`，库 `databridge_source`，用户 `databridge`，密码为 `infra/.env` 的 `MYSQL_PASSWORD`；该用户对业务源表只读，另有 CDC 复制权限及对 `sync_probe` 的 INSERT 权限。PostgreSQL 连接：`127.0.0.1:15433`，库 `databridge_target`，用户 `databridge`，密码为 `POSTGRES_PASSWORD`。两个库目前没有业务表，MySQL 已预置 `sync_probe`。
 
 停止环境但保留数据：
 
@@ -41,6 +41,14 @@ MySQL 连接：`127.0.0.1:3307`，库 `databridge_source`，用户 `databridge`�
 ```
 
 `down` 保留命名卷；`down -v` 会删除数据库数据，执行前先备份。MySQL 初始化授权脚本只在空数据卷首次启动时运行，修改脚本不会自动改动已有数据库。
+
+既有数据卷需单独执行新增的探针迁移（保持数据卷和业务表不变）：
+
+```powershell
+Set-Location 'D:\code\Program\毕设\infra'
+Get-Content -LiteralPath '.\mysql\init\02-sync-probe.sql' -Raw |
+  & $docker compose --env-file .env -f compose.yaml exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot'
+```
 
 ## 后端 CDC 与全量复制基础链路
 
@@ -58,4 +66,6 @@ mvn clean verify -Pintegration
 
 `EventApplier` 仅在全量检查点标记完成后运行，按 `cdc_event.sequence` 回放 `c/u/d`，并将目标行变更与 `event_cursor.last_sequence` 在同一 PostgreSQL 事务提交。它会拒绝错误来源表、缺列、主键不符和不支持的目标类型；失败批次不推进游标。真实 Binlog 贯通测试已覆盖全量期间更新与删除、低于固定高水位的新插入，以及 DECIMAL、JSON、DATETIME/TIMESTAMP 的最终值。
 
-集成测试使用 Testcontainers 临时创建双库和故障注入对象，结束后自动清理，不读取或修改 `infra/.env` 与开发数据库数据。此阶段的 Spring Boot 入口尚未接入任务管理和 HTTP API；运行入口本身不会启动同步任务。下一步实现任务状态机、运行前约束校验和静默窗口一致性校验，再接入 API。
+`CdcCapture.awaitReady` 不把 Engine 启动或 `no_data` 快照结束误判为可恢复。它收到快照完成通知后写入同一源库的 `sync_probe`，直到本任务的 JDBC offset 持久化才允许全量复制；探针事件入日志，回放时仅推进游标。`TaskPreflight` 在创建任务前检查两端单列 `id` 主键、列兼容性、目标空表和探针表；`sync_task` 对目标表设置唯一约束。运行时不保存源/目标数据库密码。
+
+集成测试使用 Testcontainers 临时创建双库和故障注入对象，结束后自动清理，不读取或修改 `infra/.env` 与开发数据库数据。此阶段的 Spring Boot 入口尚未接入任务管理和 HTTP API；运行入口本身不会启动同步任务。下一步实现任务状态机和静默窗口一致性校验，再接入 API。

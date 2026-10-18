@@ -5,6 +5,9 @@ import io.debezium.engine.RecordChangeEvent;
 import io.debezium.engine.format.ChangeEventFormat;
 import io.debezium.embedded.Connect;
 import java.io.IOException;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -12,8 +15,11 @@ import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
+import javax.sql.DataSource;
 import org.apache.kafka.connect.source.SourceRecord;
 
 public final class CdcCapture implements AutoCloseable {
@@ -24,17 +30,41 @@ public final class CdcCapture implements AutoCloseable {
     private final CdcRecordMapper mapper = new CdcRecordMapper();
     private final AtomicReference<Throwable> failure = new AtomicReference<>();
     private final ExecutorService executor;
+    private final String connectorName;
+    private final String topicPrefix;
+    private final String probeTableName;
+    private final DataSource sourceProbe;
+    private final AtomicBoolean probeSent = new AtomicBoolean();
+    private CompletableFuture<Void> snapshotReady;
     private DebeziumEngine<RecordChangeEvent<SourceRecord>> engine;
     private volatile boolean closing;
 
     public CdcCapture(
             UUID taskId, String tableName, Properties connectionSettings,
             CdcEventRepository repository) {
+        this(taskId, tableName, connectionSettings, repository, null);
+    }
+
+    public CdcCapture(
+            UUID taskId, String tableName, Properties connectionSettings,
+            CdcEventRepository repository, DataSource sourceProbe) {
         this.taskId = Objects.requireNonNull(taskId, "taskId");
         this.tableName = Objects.requireNonNull(tableName, "tableName");
         this.repository = Objects.requireNonNull(repository, "repository");
         this.settings = new Properties();
         this.settings.putAll(Objects.requireNonNull(connectionSettings, "connectionSettings"));
+        this.connectorName = "databridge-" + taskId;
+        this.topicPrefix = Objects.requireNonNull(settings.getProperty("topic.prefix"), "topic.prefix");
+        if (!topicPrefix.matches("[A-Za-z_][A-Za-z0-9_-]*")) {
+            throw new IllegalArgumentException("Invalid CDC topic.prefix: " + topicPrefix);
+        }
+        this.sourceProbe = sourceProbe;
+        String[] sourceName = tableName.split("\\.", -1);
+        if (sourceName.length != 2 || !sourceName[0].matches("[A-Za-z_][A-Za-z0-9_]*")
+                || !sourceName[1].matches("[A-Za-z_][A-Za-z0-9_]*")) {
+            throw new IllegalArgumentException("Invalid CDC source table: " + tableName);
+        }
+        this.probeTableName = sourceName[0] + ".sync_probe";
         this.executor = Executors.newSingleThreadExecutor(
                 runnable -> new Thread(runnable, "databridge-cdc-" + taskId));
     }
@@ -45,10 +75,11 @@ public final class CdcCapture implements AutoCloseable {
         }
         var properties = new Properties();
         properties.putAll(settings);
-        properties.setProperty("name", "databridge-" + taskId);
+        properties.setProperty("name", connectorName);
         properties.setProperty("connector.class", "io.debezium.connector.mysql.MySqlConnector");
         properties.setProperty("snapshot.mode", "no_data");
-        properties.setProperty("table.include.list", tableName.replace(".", "\\."));
+        properties.setProperty("table.include.list", tableName.replace(".", "\\.")
+                + (sourceProbe == null ? "" : "," + probeTableName.replace(".", "\\.")));
         properties.setProperty("include.schema.changes", "false");
         properties.setProperty("tombstones.on.delete", "false");
         properties.setProperty("tasks.max", "1");
@@ -56,6 +87,7 @@ public final class CdcCapture implements AutoCloseable {
         properties.setProperty("record.processing.order", "ORDERED");
         properties.setProperty("decimal.handling.mode", "string");
         properties.setProperty("time.precision.mode", "isostring");
+        properties.setProperty("notification.enabled.channels", "databridge-ready");
         properties.setProperty("offset.storage", "io.debezium.storage.jdbc.offset.JdbcOffsetBackingStore");
         properties.setProperty("offset.storage.jdbc.connection.url",
                 inMetadataSchema(settings.getProperty("offset.storage.jdbc.connection.url")));
@@ -67,13 +99,15 @@ public final class CdcCapture implements AutoCloseable {
         properties.setProperty("offset.flush.interval.ms", "1000");
         properties.setProperty("errors.max.retries", "0");
 
+        snapshotReady = CaptureReadinessChannel.register(topicPrefix);
         engine = DebeziumEngine.create(ChangeEventFormat.of(Connect.class))
                 .using(properties)
                 .notifying(this::handleBatch)
                 .using((success, message, error) -> {
                     if (!closing && (!success || error != null)) {
-                        failure.compareAndSet(null,
-                                error != null ? error : new IllegalStateException(message));
+                        Throwable cause = error != null ? error : new IllegalStateException(message);
+                        failure.compareAndSet(null, cause);
+                        snapshotReady.completeExceptionally(cause);
                     }
                 })
                 .build();
@@ -83,6 +117,7 @@ public final class CdcCapture implements AutoCloseable {
             } catch (Throwable error) {
                 if (!closing) {
                     failure.compareAndSet(null, error);
+                    snapshotReady.completeExceptionally(error);
                 }
             }
         });
@@ -95,7 +130,8 @@ public final class CdcCapture implements AutoCloseable {
         var events = new ArrayList<CdcEvent>(records.size());
         for (var change : records) {
             var event = mapper.map(change.record());
-            if (!tableName.equals(event.tableName())) {
+            if (!tableName.equals(event.tableName())
+                    && !(sourceProbe != null && probeTableName.equals(event.tableName()))) {
                 throw new IllegalArgumentException("Unexpected CDC table: " + event.tableName());
             }
             events.add(event);
@@ -111,6 +147,80 @@ public final class CdcCapture implements AutoCloseable {
         return failure.get();
     }
 
+    public void awaitReady(Duration timeout) {
+        Objects.requireNonNull(timeout, "timeout");
+        if (timeout.isNegative() || timeout.isZero() || engine == null) {
+            throw new IllegalArgumentException("CDC must be started and timeout must be positive");
+        }
+        long deadline = System.nanoTime() + timeout.toNanos();
+        while (System.nanoTime() < deadline) {
+            if (closing) {
+                throw new IllegalStateException("CDC capture closed before readiness");
+            }
+            Throwable error = failure.get();
+            if (error != null) {
+                throw new IllegalStateException("CDC failed before readiness", error);
+            }
+            if (snapshotReady.isCompletedExceptionally()) {
+                throw new IllegalStateException("Debezium initial snapshot failed");
+            }
+            if (snapshotReady.isDone()) {
+                if (offsetDurable()) {
+                    return;
+                }
+                if (probeSent.compareAndSet(false, true)) {
+                    writeProbe();
+                }
+            }
+            try {
+                TimeUnit.MILLISECONDS.sleep(50);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Interrupted while waiting for CDC readiness", e);
+            }
+        }
+        throw new IllegalStateException("CDC readiness timed out after " + timeout
+                + "; snapshotSignal=" + snapshotReady.isDone()
+                + "; taskOffsetPresent=" + offsetDurable());
+    }
+
+    private void writeProbe() {
+        if (sourceProbe == null) {
+            throw new IllegalStateException("A source probe DataSource is required before the first CDC offset");
+        }
+        try (var connection = sourceProbe.getConnection();
+             var statement = connection.prepareStatement(
+                     "INSERT INTO `" + probeTableName.replace(".", "`.`")
+                             + "` (`marker`) VALUES (?)")) {
+            statement.setString(1, UUID.randomUUID().toString());
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            throw new IllegalStateException("Could not write source CDC readiness probe", e);
+        }
+    }
+
+    private boolean offsetDurable() {
+        try (var connection = DriverManager.getConnection(
+                settings.getProperty("offset.storage.jdbc.connection.url"),
+                settings.getProperty("offset.storage.jdbc.connection.user"),
+                settings.getProperty("offset.storage.jdbc.connection.password"));
+             var statement = connection.prepareStatement(
+                     "SELECT 1 FROM databridge_meta.debezium_offset_storage "
+                             + "WHERE offset_key::jsonb ->> 0 = ? "
+                             + "AND offset_key::jsonb -> 1 ->> 'server' = ? LIMIT 1")) {
+            statement.setString(1, connectorName);
+            statement.setString(2, topicPrefix);
+            try (var result = statement.executeQuery()) {
+                return result.next();
+            }
+        } catch (SQLException e) {
+            if ("42P01".equals(e.getSQLState())) {
+                return false;
+            }
+            throw new IllegalStateException("Could not verify persistent CDC offset", e);
+        }
+    }
+
     private static String inMetadataSchema(String jdbcUrl) {
         if (jdbcUrl == null || jdbcUrl.isBlank()) {
             throw new IllegalArgumentException("PostgreSQL JDBC URL is required for Debezium state");
@@ -121,6 +231,10 @@ public final class CdcCapture implements AutoCloseable {
     @Override
     public synchronized void close() throws IOException {
         closing = true;
+        if (snapshotReady != null) {
+            snapshotReady.completeExceptionally(new IllegalStateException("CDC capture closed"));
+            CaptureReadinessChannel.unregister(topicPrefix, snapshotReady);
+        }
         if (engine != null) {
             try {
                 engine.close();
