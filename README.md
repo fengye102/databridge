@@ -2,7 +2,7 @@
 
 基于 Spring Boot 的 MySQL → PostgreSQL 全量迁移与增量同步毕业设计项目。
 
-**当前阶段：本地双库环境已可运行，核心链路设计待确认。** 核心链路拟采用“先捕获并持久化 CDC 事件、执行 JDBC 全量、再按序回放并持续同步”，避免迟到的全量批次覆盖新事件。当前仓库尚无同步服务程序。
+**当前阶段：本地双库环境与 CDC 基础链路已通过测试，完整迁移服务尚未完成。** 已有真实 MySQL Binlog 捕获、PostgreSQL 事件日志、去重及故障重放验证；全量迁移、事件应用、任务 API 和前端尚未实现。核心链路采用“先捕获并持久化 CDC 事件、执行 JDBC 全量、再按序回放并持续同步”，避免迟到的全量批次覆盖新事件。
 
 ## 文档
 
@@ -42,4 +42,16 @@ MySQL 连接：`127.0.0.1:3307`，库 `databridge_source`，用户 `databridge`�
 
 `down` 保留命名卷；`down -v` 会删除数据库数据，执行前先备份。MySQL 初始化授权脚本只在空数据卷首次启动时运行，修改脚本不会自动改动已有数据库。
 
-实施同步服务前请先阅读 `Codex.md` 与核心链路设计，并完成该设计的书面确认。
+## 后端 CDC 基础链路
+
+`backend/pom.xml` 固定 Spring Boot 3.5.16、Debezium 3.7.0.Final 和 Java 21 编译目标；本机使用 JDK 23、Maven 3.9.16。测试数据库版本为 MySQL 8.4.11、PostgreSQL 17.11。CDC 采用 `snapshot.mode=no_data`、单线程接收，事件先在 PostgreSQL 事务中持久化，再向 Debezium 确认；offset 和 schema history 也保存在 PostgreSQL 的 `databridge_meta` schema。
+
+PowerShell 验证命令（需先启动 Docker Desktop）：
+
+```powershell
+Set-Location 'D:\code\Program\毕设\backend'
+mvn test
+mvn clean verify -Pintegration
+```
+
+集成测试使用 Testcontainers 临时创建双库和故障注入对象，结束后自动清理，不读取或修改 `infra/.env` 与开发数据库数据。此阶段的 Spring Boot 入口尚未接入任务管理和 HTTP API；运行入口本身不会启动同步任务。核心设计已确认，下一步实现可恢复全量迁移，再实现事件应用与静默窗口校验。

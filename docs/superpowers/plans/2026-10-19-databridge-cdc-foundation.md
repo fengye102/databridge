@@ -56,11 +56,20 @@
 
 ### Task 3: 真实 Debezium 捕获
 
-- [ ] 先写 `CdcCaptureIT`：临时 MySQL 开 ROW/FULL Binlog、建 BIGINT 主键表；临时 PG 执行迁移；启动 no_data Engine 后插入、更新、删除，在事件日志中按序等到三条；重启 Engine 后继续写入并确认只新增事件；运行观察失败。
-- [ ] 实现 `CdcCapture`：固定 `snapshot.mode=no_data`、MySQL 单任务连接、PostgreSQL JDBC offset/schema-history、`record.processing.threads=1`、`tombstones.on.delete=false`；只接收配置的业务表；每批先提交事件，再逐条 `markProcessed` 和 `markBatchFinished`。
-- [ ] 扩展 IT：同一事务多行、手动重复入库、事件入库失败时不确认、Engine 关闭重启后无丢失；逐项观察先失败再通过。
-- [ ] 跑 `mvn clean verify -Pintegration`，记录实际版本、测试数量和失败点；更新 README 的运行边界，明确尚未实现全量/回放/API/前端。
+- [x] 先写 `CdcCaptureIT`：临时 MySQL 开 ROW/FULL Binlog、建 BIGINT 主键表；临时 PG 执行迁移；启动 no_data Engine 后插入、更新、删除，在事件日志中按序等到三条；重启 Engine 后继续写入并确认只新增事件；运行观察失败。
+- [x] 实现 `CdcCapture`：固定 `snapshot.mode=no_data`、MySQL 单任务连接、PostgreSQL JDBC offset/schema-history、`record.processing.threads=1`、`tombstones.on.delete=false`；只接收配置的业务表；每批先提交事件，再逐条 `markProcessed` 和 `markBatchFinished`。
+- [x] 扩展 IT：同一事务多行、手动重复入库、事件入库失败时不确认、Engine 关闭重启后无丢失；逐项观察先失败再通过。
+- [x] 跑 `mvn clean verify -Pintegration`，记录实际版本、测试数量和失败点；更新 README 的运行边界，明确尚未实现全量/回放/API/前端。
 
 ## Exit Gate
 
 只有 Task 3 的真实集成测试通过，才能开始 FullCopyWorker。若事件身份无法区分同事务多行，或 JDBC offset/schema-history 与事件日志的恢复测试失败，先修正设计与本计划，不以模拟测试替代真实链路。
+
+## 验证记录（2026-10-19）
+
+- 基线 `mvn test` 通过；迁移脚本缺失时 `SchemaMigrationIT` 按预期失败，加入 V1 后通过。
+- 首次真实捕获发现 JDBC 存储缺少显式 `debezium-storage-api/common` 运行时模块；补齐后首次 DML 成功。
+- 重启恢复发现 Debezium JDBC 表名带 schema 时存在性检查误判；改为 PostgreSQL JDBC `currentSchema=databridge_meta` 和不带前缀的表名后，重启通过。
+- 临时数据库中验证了 INSERT/UPDATE/DELETE 顺序、同事务不同行及同一主键连续 UPDATE 的事件键唯一性、重复事件不再入队。
+- PostgreSQL 触发器故障注入使事件入库失败，Engine 停止且未确认该事件；移除故障并重启后事件成功重放一次。
+- 完整 `mvn clean verify -Pintegration` 通过：7 项单元测试、5 项集成测试，零失败、零跳过。数据库镜像为 MySQL 8.4.11 与 PostgreSQL 17.11。
