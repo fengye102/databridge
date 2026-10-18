@@ -66,4 +66,4 @@
 
 - 原始文档为项目根目录的 `基于_Spring_Boot_的异构数据库迁移与增量同步平台的设计与实现_v2.md`。
 - 已建立公开 Git 仓库 `fengye102/databridge`；2026-10-19 用户确认开始按核心链路设计实施。先验证真实 CDC 捕获、事件持久化、去重、顺序与恢复，再进入全量迁移；前端最后开发。
-- CDC 事件入库和独立的 FullCopyWorker 已通过真实双库集成测试；当前尚未实现 EventApplier、TaskCoordinator、Verifier、TaskApi 与前端，CDC 与全量尚未被状态机编排为可启动的完整任务。依赖版本记录：本机 JDK 23.0.2、Maven 3.9.16；后端按 Java 21 编译，Spring Boot 3.5.16、Debezium 3.7.0.Final；数据库 MySQL 8.4.11、PostgreSQL 17.11。
+- CDC 事件入库、FullCopyWorker 和 EventApplier 已通过真实双库贯通测试；当前尚未实现共享 RowMapper、TaskCoordinator、Verifier、TaskApi 与前端，三个组件尚未被状态机编排为可启动的完整任务。依赖版本记录：本机 JDK 23.0.2、Maven 3.9.16；后端按 Java 21 编译，Spring Boot 3.5.16、Debezium 3.7.0.Final；数据库 MySQL 8.4.11、PostgreSQL 17.11。

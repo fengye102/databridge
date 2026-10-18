@@ -56,4 +56,6 @@ mvn clean verify -Pintegration
 
 `FullCopyWorker` 在调用方确认 CDC 已就绪后初始化固定的 `MAX(id)` 高水位，以有符号 BIGINT `id` 做 keyset 分批复制。每批 PostgreSQL UPSERT 与 `full_checkpoint.last_id` 在同一事务；空批标记完成，重新调用从检查点继续。源端 `TIMESTAMP` 会话设为 UTC，`DATETIME` 保留无时区墙上时间，目标时间列为 `timestamp without time zone`；JSON 目标列为 `jsonb`。不兼容的列类型、精度或长度会被拒绝。全量期间 CDC 仍只入事件日志，不直接覆盖业务目标表。
 
-集成测试使用 Testcontainers 临时创建双库和故障注入对象，结束后自动清理，不读取或修改 `infra/.env` 与开发数据库数据。此阶段的 Spring Boot 入口尚未接入任务管理和 HTTP API；运行入口本身不会启动同步任务。下一步实现事件应用与静默窗口校验，再接入任务状态机和 API。
+`EventApplier` 仅在全量检查点标记完成后运行，按 `cdc_event.sequence` 回放 `c/u/d`，并将目标行变更与 `event_cursor.last_sequence` 在同一 PostgreSQL 事务提交。它会拒绝错误来源表、缺列、主键不符和不支持的目标类型；失败批次不推进游标。真实 Binlog 贯通测试已覆盖全量期间更新与删除、低于固定高水位的新插入，以及 DECIMAL、JSON、DATETIME/TIMESTAMP 的最终值。
+
+集成测试使用 Testcontainers 临时创建双库和故障注入对象，结束后自动清理，不读取或修改 `infra/.env` 与开发数据库数据。此阶段的 Spring Boot 入口尚未接入任务管理和 HTTP API；运行入口本身不会启动同步任务。下一步实现任务状态机、运行前约束校验和静默窗口一致性校验，再接入 API。
