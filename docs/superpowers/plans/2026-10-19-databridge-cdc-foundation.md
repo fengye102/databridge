@@ -48,11 +48,11 @@
 
 ### Task 2: 事件身份、映射和入库
 
-- [ ] 先写 `EventKeyTest`：分区/offset 键顺序改变时哈希相同；同一事务多行的 `row` offset 或主键不同则不同；操作不同则不同。观察失败。
-- [ ] 实现 `EventKey.sha256(Map<String, ?> partition, Map<String, ?> offset, String tableName, String operation, long rowId)`，递归排序对象键并序列化后 SHA-256；输入缺失时抛明确异常。
-- [ ] 先写 `CdcRecordMapperTest`：INSERT/UPDATE/DELETE 的主键、操作、after_row 与 offset 正确；不接受缺少主键或未知操作；运行观察失败，然后实现 mapper。
-- [ ] 先写 `CdcEventRepositoryIT`：重复 event_key 只留一行、不同事件按 sequence 排列、事务内第二条失败时第一条回滚；运行观察失败。
-- [ ] 实现 `CdcEventRepository.insertBatch(UUID taskId, List<CdcEvent> events)`，用单个 PostgreSQL 事务和 `ON CONFLICT (task_id,event_key) DO NOTHING`；运行单元与 IT 直到通过。
+- [x] 先写 `EventKeyTest`：分区/offset 键顺序改变时哈希相同；同一事务多行的 `row` offset 或主键不同则不同；操作不同则不同。观察失败。
+- [x] 实现 `EventKey.sha256(Map<String, ?> partition, Map<String, ?> offset, String tableName, String operation, long rowId)`，递归排序对象键并序列化后 SHA-256；输入缺失时抛明确异常。
+- [x] 先写 `CdcRecordMapperTest`：INSERT/UPDATE/DELETE 的主键、操作、after_row 与 offset 正确；不接受缺少主键或未知操作；运行观察失败，然后实现 mapper。
+- [x] 先写 `CdcEventRepositoryIT`：重复 event_key 只留一行、不同事件按 sequence 排列、事务内第二条失败时第一条回滚；运行观察失败。
+- [x] 实现 `CdcEventRepository.insertBatch(UUID taskId, List<CdcEvent> events)`，用单个 PostgreSQL 事务和 `ON CONFLICT (task_id,event_key) DO NOTHING`；运行单元与 IT 直到通过。
 
 ### Task 3: 真实 Debezium 捕获
 
