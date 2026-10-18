@@ -25,7 +25,7 @@
 1. 源库 MySQL 开启 Binlog，`binlog_format=ROW`、`binlog_row_image=FULL`，并为最长全量时间、可能停机时间与恢复时间留出足够保留期。[Debezium MySQL 前置条件](https://debezium.io/documentation/reference/stable/connectors/mysql.html)
 2. 源表有唯一且不可变的单列有符号 BIGINT 主键。任务建立时校验主键、字段类型和目标表结构；目标表必须为空且主键或唯一约束足以支持 UPSERT。
 3. 同步期间不执行 DDL，不更改源表主键。运行时检测到无法解释的 schema 事件或主键变更时置为 `FAILED`，不跳过并推进位点。
-4. 源端、目标端默认时区及时间精度记录在任务配置中。首版支持 BIGINT、INTEGER、VARCHAR/TEXT、DECIMAL、DATETIME、TIMESTAMP、JSON 和 NULL；不支持的类型在建任务时拒绝。
+4. 首版时间映射固定为 MySQL `DATETIME` 无时区墙上时间、MySQL `TIMESTAMP` 源连接 UTC 会话后的 UTC 墙上时间，均写入 PostgreSQL `timestamp without time zone`；微秒精度保持。任务配置记录源端与目标端的实际时区设置。首版支持 BIGINT、INTEGER、VARCHAR/TEXT、DECIMAL、DATETIME、TIMESTAMP、JSON 和 NULL；不支持的类型在建任务时拒绝。
 5. 目标业务表的触发器、外键副作用不在首版保证范围。开发与演示环境由 Compose 固定数据库版本。
 6. 数据源连接串与密码从环境变量注入，任务只保存数据源配置标识，不保存明文密码；界面只选择预配置数据源。
 

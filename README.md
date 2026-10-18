@@ -42,7 +42,7 @@ MySQL 连接：`127.0.0.1:3307`，库 `databridge_source`，用户 `databridge`�
 
 `down` 保留命名卷；`down -v` 会删除数据库数据，执行前先备份。MySQL 初始化授权脚本只在空数据卷首次启动时运行，修改脚本不会自动改动已有数据库。
 
-## 后端 CDC 基础链路
+## 后端 CDC 与全量复制基础链路
 
 `backend/pom.xml` 固定 Spring Boot 3.5.16、Debezium 3.7.0.Final 和 Java 21 编译目标；本机使用 JDK 23、Maven 3.9.16。测试数据库版本为 MySQL 8.4.11、PostgreSQL 17.11。CDC 采用 `snapshot.mode=no_data`、单线程接收，事件先在 PostgreSQL 事务中持久化，再向 Debezium 确认；offset 和 schema history 也保存在 PostgreSQL 的 `databridge_meta` schema。
 
@@ -54,4 +54,6 @@ mvn test
 mvn clean verify -Pintegration
 ```
 
-集成测试使用 Testcontainers 临时创建双库和故障注入对象，结束后自动清理，不读取或修改 `infra/.env` 与开发数据库数据。此阶段的 Spring Boot 入口尚未接入任务管理和 HTTP API；运行入口本身不会启动同步任务。核心设计已确认，下一步实现可恢复全量迁移，再实现事件应用与静默窗口校验。
+`FullCopyWorker` 在调用方确认 CDC 已就绪后初始化固定的 `MAX(id)` 高水位，以有符号 BIGINT `id` 做 keyset 分批复制。每批 PostgreSQL UPSERT 与 `full_checkpoint.last_id` 在同一事务；空批标记完成，重新调用从检查点继续。源端 `TIMESTAMP` 会话设为 UTC，`DATETIME` 保留无时区墙上时间，目标时间列为 `timestamp without time zone`；JSON 目标列为 `jsonb`。不兼容的列类型、精度或长度会被拒绝。全量期间 CDC 仍只入事件日志，不直接覆盖业务目标表。
+
+集成测试使用 Testcontainers 临时创建双库和故障注入对象，结束后自动清理，不读取或修改 `infra/.env` 与开发数据库数据。此阶段的 Spring Boot 入口尚未接入任务管理和 HTTP API；运行入口本身不会启动同步任务。下一步实现事件应用与静默窗口校验，再接入任务状态机和 API。

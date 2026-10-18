@@ -44,6 +44,7 @@
 - CDC 事件应用和应用游标推进必须在同一个 PostgreSQL 事务内。首版保留事件记录，不依赖立即清理后的去重行为。
 - 全量开始时固定每张表的扫描主键上界，避免持续插入使扫描无界；源端主键更新、DDL 变更和无主键表在第一阶段明确拒绝。
 - 运行中出现无法映射的类型、CDC 位点丢失、binlog 被清理或顺序无法保证时，任务进入失败状态，不静默跳过事件。
+- 首版时间映射固定为：MySQL `DATETIME` 按无时区墙上时间写入 PostgreSQL `timestamp without time zone`；MySQL `TIMESTAMP` 在源连接会话设为 UTC 后，按 UTC 墙上时间写入同类目标列。任务创建时须拒绝不同的目标时间列类型；未来 `RowMapper` 需让 CDC 与全量路径采用同一语义。
 - 只在源端停止写入、CDC 追平后进行确定性一致性校验；在线校验属于扩展研究。
 
 ## 4. 开发与验证
@@ -65,4 +66,4 @@
 
 - 原始文档为项目根目录的 `基于_Spring_Boot_的异构数据库迁移与增量同步平台的设计与实现_v2.md`。
 - 已建立公开 Git 仓库 `fengye102/databridge`；2026-10-19 用户确认开始按核心链路设计实施。先验证真实 CDC 捕获、事件持久化、去重、顺序与恢复，再进入全量迁移；前端最后开发。
-- CDC 基础链路的真实双库集成测试已通过；当前尚未实现 FullCopyWorker、EventApplier、TaskCoordinator、Verifier、TaskApi 与前端。依赖版本记录：本机 JDK 23.0.2、Maven 3.9.16；后端按 Java 21 编译，Spring Boot 3.5.16、Debezium 3.7.0.Final；数据库 MySQL 8.4.11、PostgreSQL 17.11。
+- CDC 事件入库和独立的 FullCopyWorker 已通过真实双库集成测试；当前尚未实现 EventApplier、TaskCoordinator、Verifier、TaskApi 与前端，CDC 与全量尚未被状态机编排为可启动的完整任务。依赖版本记录：本机 JDK 23.0.2、Maven 3.9.16；后端按 Java 21 编译，Spring Boot 3.5.16、Debezium 3.7.0.Final；数据库 MySQL 8.4.11、PostgreSQL 17.11。
