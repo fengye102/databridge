@@ -2,13 +2,15 @@
 
 基于 Spring Boot 的 MySQL → PostgreSQL 全量迁移与增量同步毕业设计项目。
 
-**当前阶段：CDC、全量复制、事件回放、任务状态机与本机 HTTP 运行入口已通过真实双库测试。** 核心链路采用“先捕获并持久化 CDC 事件、执行 JDBC 全量、再按序回放并持续同步”，避免迟到的全量批次覆盖新事件。静默窗口校验报告和前端仍待实现。
+**当前阶段：CDC、全量复制、事件回放、任务状态机、本机 HTTP 入口及静默窗口校验报告已通过 50 项自动化测试。** 核心链路采用“先捕获并持久化 CDC 事件、执行 JDBC 全量、再按序回放并持续同步”，避免迟到的全量批次覆盖新事件。管理界面仍待开发。
 
 ## 文档
 
 - [项目规则](Codex.md)
 - [选题方案 v3](docs/proposals/databridge-proposal-v3.md)
 - [核心链路设计](docs/superpowers/specs/2026-10-18-databridge-core-design.md)
+- [静默窗口校验设计](docs/superpowers/specs/2026-10-19-databridge-verification-design.md)
+- [1 万行校验预实验记录](experiments/verification-10000.md)
 - [本地双库环境设计](docs/superpowers/specs/2026-10-18-databridge-local-infra-design.md)
 - [历史选题方案 v2](基于_Spring_Boot_的异构数据库迁移与增量同步平台的设计与实现_v2.md)
 
@@ -93,7 +95,10 @@ Invoke-RestMethod -Method Post -Uri "$api/$id/start"
 Invoke-RestMethod -Method Get -Uri "$api/$id"
 Invoke-RestMethod -Method Post -Uri "$api/$id/pause"
 Invoke-RestMethod -Method Post -Uri "$api/$id/resume"
+ # 源端停止写入，等待状态为 STREAMING 后再做确定性校验
+$report = Invoke-RestMethod -Method Post -Uri "$api/$id/verifications"
+Invoke-RestMethod -Method Get -Uri "$api/$id/verifications/$($report.runId)"
 Invoke-RestMethod -Method Post -Uri "$api/$id/stop"
 ```
 
-`start` 异步返回 202；通过查询状态等待 `STREAMING`。非法建任务请求返回 400、目标表已被任务占用返回 409、未知任务返回 404、非法状态转换返回 409；API 不返回原始异常或凭据。尚无任务列表、进度指标、静默窗口校验及报告接口；当前 API 不是完整管理平台。
+`start` 异步返回 202；通过查询状态等待 `STREAMING`。校验接口同步返回 201，报告为 `CONSISTENT`、`DIFFERENT` 或 `INCONCLUSIVE`；后者含原因码，表示源端窗口内写入、探针超时或扫描失败，不能作为一致结论。校验采用前后两个 CDC 探针，等应用游标追平，再按 `id` 分批比较；只记录行数、主键与最多 100 条不一致列名，不存业务字段原值。源端必须停写才能获得确定性结论；目标端也不应有其他写入者。默认校验批次 500、每个探针超时 30 秒，可用 `DATABRIDGE_VERIFICATION_BATCH_SIZE`、`DATABRIDGE_VERIFICATION_TIMEOUT_SECONDS` 调整。非法请求返回 400、目标表已被任务占用返回 409、未知任务或报告返回 404、非法状态返回 409；API 不返回原始异常或凭据。尚无任务列表和进度指标；当前 API 不是完整管理平台。

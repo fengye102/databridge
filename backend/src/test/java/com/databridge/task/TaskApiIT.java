@@ -101,6 +101,20 @@ class TaskApiIT {
         awaitStatus(taskUrl, "STREAMING", Duration.ofSeconds(60));
         awaitTargetName(1, "initial", Duration.ofSeconds(15));
 
+        String verificationUrl = taskUrl + "/verifications";
+        ResponseEntity<JsonNode> verified = http.postForEntity(verificationUrl, null, JsonNode.class);
+        assertEquals(HttpStatus.CREATED, verified.getStatusCode());
+        assertEquals("CONSISTENT", verified.getBody().path("status").asText());
+        assertEquals(1, verified.getBody().path("sourceRows").asLong());
+        String runId = verified.getBody().path("runId").asText();
+        assertEquals(verified.getBody(), get(verificationUrl + "/" + runId));
+        assertEquals(HttpStatus.NOT_FOUND, http.getForEntity(
+                verificationUrl + "/" + UUID.randomUUID(), JsonNode.class).getStatusCode());
+        assertEquals(HttpStatus.BAD_REQUEST, http.getForEntity(
+                verificationUrl + "/invalid-uuid", JsonNode.class).getStatusCode());
+        assertFalse(verified.getBody().toString().contains("initial"));
+        assertFalse(verified.getBody().toString().contains("capturepass"));
+
         assertEquals(HttpStatus.OK,
                 http.postForEntity(taskUrl + "/pause", null, JsonNode.class).getStatusCode());
         awaitStatus(taskUrl, "PAUSED", Duration.ofSeconds(5));
@@ -114,6 +128,8 @@ class TaskApiIT {
         assertEquals(HttpStatus.OK,
                 http.postForEntity(taskUrl + "/stop", null, JsonNode.class).getStatusCode());
         assertEquals("STOPPED", get(taskUrl).path("status").asText());
+        assertEquals(HttpStatus.CONFLICT,
+                http.postForEntity(verificationUrl, null, JsonNode.class).getStatusCode());
         assertEquals(HttpStatus.CONFLICT,
                 http.postForEntity(taskUrl + "/resume", null, JsonNode.class).getStatusCode());
         assertTrue(repository.recoverableTaskIds().isEmpty(), "Stopped tasks stay stopped on boot");

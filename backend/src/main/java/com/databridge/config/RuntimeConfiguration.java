@@ -3,6 +3,7 @@ package com.databridge.config;
 import com.databridge.task.TaskCoordinator;
 import com.databridge.task.TaskRecovery;
 import com.databridge.task.TaskRepository;
+import com.databridge.verify.Verifier;
 import com.zaxxer.hikari.HikariDataSource;
 import java.util.Properties;
 import javax.sql.DataSource;
@@ -74,6 +75,13 @@ public class RuntimeConfiguration {
     @Bean
     TaskRecovery taskRecovery(TaskRepository repository, TaskCoordinator coordinator) {
         return new TaskRecovery(repository, coordinator);
+    }
+
+    @Bean
+    Verifier verifier(
+            @Qualifier("sourceDataSource") DataSource source,
+            @Qualifier("targetDataSource") DataSource target) {
+        return new Verifier(source, target);
     }
 
     private static HikariDataSource dataSource(

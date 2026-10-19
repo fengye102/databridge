@@ -9,11 +9,11 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
-@RestControllerAdvice(basePackageClasses = TaskController.class)
+@RestControllerAdvice(basePackages = "com.databridge")
 public class TaskApiErrors {
     @ExceptionHandler(EmptyResultDataAccessException.class)
     ResponseEntity<ApiError> notFound() {
-        return error(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND", "Task does not exist");
+        return error(HttpStatus.NOT_FOUND, "NOT_FOUND", "Task or report does not exist");
     }
 
     @ExceptionHandler(TaskRepository.TargetAlreadyOwnedException.class)

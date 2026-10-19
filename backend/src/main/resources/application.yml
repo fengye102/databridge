@@ -21,3 +21,5 @@ databridge:
     database: ${DATABRIDGE_MYSQL_DATABASE:databridge_source}
     server-id: ${DATABRIDGE_MYSQL_SERVER_ID:5402}
   copy-batch-size: ${DATABRIDGE_COPY_BATCH_SIZE:500}
+  verification-batch-size: ${DATABRIDGE_VERIFICATION_BATCH_SIZE:500}
+  verification-timeout-seconds: ${DATABRIDGE_VERIFICATION_TIMEOUT_SECONDS:30}

@@ -45,7 +45,8 @@ class TaskPreflightIT {
                 + "amount DECIMAL(18,4), observed_at DATETIME(6))");
         executeSource("CREATE TABLE sync_probe (id BIGINT AUTO_INCREMENT PRIMARY KEY, "
                 + "marker CHAR(36) NOT NULL UNIQUE)");
-        executeTarget("TRUNCATE databridge_meta.sync_task");
+        executeTarget("TRUNCATE databridge_meta.verification_diff, "
+                + "databridge_meta.verification_run, databridge_meta.sync_task");
         executeTarget("DROP SCHEMA IF EXISTS business CASCADE");
         executeTarget("CREATE SCHEMA business");
         executeTarget("CREATE TABLE business.orders (id BIGINT PRIMARY KEY, name VARCHAR(100), "
