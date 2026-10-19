@@ -16,10 +16,12 @@
 | `backend/` | Spring Boot 后端源码、单元测试和后端构建文件 |
 | `backend/src/main/java/com/databridge/` | 后端 Java 代码；按 `cdc/`、`task/`、`copy/`、`verify/` 业务责任分包，不按 controller/service/repository 全局分层 |
 | `backend/src/main/java/com/databridge/config/` | Spring Boot 双库连接、CDC 属性与任务运行器装配；配置类名用 `*Configuration`，不存放业务状态或凭据文件 |
+| `backend/src/main/java/com/databridge/verify/` | 静默窗口探针、流式行比较和校验报告持久化；类名用 `Verifier`、`Verification*`；源码与报告迁移脚本随版本保留，临时扫描缓冲不落盘 |
 | `backend/src/main/resources/application.yml` | 可提交的非秘密运行配置；数据库连接信息只引用环境变量，不写真实密码；与源码一起保留 |
 | `backend/src/main/resources/db/migration/` | PostgreSQL 元数据迁移脚本，使用 Flyway `V<序号>__<snake_case>.sql` 命名；只追加新版本，不改已经运行过的版本 |
 | `backend/src/main/resources/META-INF/services/` | Java ServiceLoader 服务声明；仅登记需要嵌入式加载的 Debezium 扩展，文件名使用接口全限定名，随源码保留，不作临时清理 |
 | `backend/src/test/java/com/databridge/` | 对应生产包的单元与集成测试；集成测试用 `*IT.java` 命名 |
+| `backend/src/test/java/com/databridge/verify/` | 校验器类型边界、真实双库差异与源端写入竞争测试；测试容器结束即清理 |
 | `backend/target/` | Maven 构建输出，不纳入版本控制；可由 `mvn clean` 重建 |
 | `backend/*.ps1` | 本地开发与验证入口；脚本只读未跟踪凭据，不输出密码 |
 | `frontend/` | Vue 管理界面源码和前端构建文件；核心链路通过后再创建 |
@@ -53,6 +55,7 @@
 - 首版 HTTP API 只绑定 `127.0.0.1`，未实现身份认证，不向局域网或公网暴露；响应不得包含数据库密码、JDBC URL 或原始异常文本。
 - 首版时间映射固定为：MySQL `DATETIME` 按无时区墙上时间写入 PostgreSQL `timestamp without time zone`；MySQL `TIMESTAMP` 在源连接会话设为 UTC 后，按 UTC 墙上时间写入同类目标列。任务创建时须拒绝不同的目标时间列类型；未来 `RowMapper` 需让 CDC 与全量路径采用同一语义。
 - 只在源端停止写入、CDC 追平后进行确定性一致性校验；在线校验属于扩展研究。
+- 校验前后各写一次同任务探针并等待应用游标越过探针；若两个探针之间有业务 CDC 事件，报告为 `INCONCLUSIVE`，不得宣称一致或差异确定。差异报告只保存行主键与不一致列名，不保存业务字段原值。
 
 ## 4. 开发与验证
 
