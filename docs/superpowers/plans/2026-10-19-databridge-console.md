@@ -52,7 +52,7 @@
 
 - [x] 在没有静态配置时确认 `GET http://127.0.0.1:18080/` 为 404；配置 Spring Boot 读取构建后的 `frontend/dist/`，确认根页与 `/assets/` 可从同一进程读取，不开放外网端口。
 - [x] 更新 README 和规则状态，运行 `mvn --batch-mode -q clean verify -Pintegration`、`npm test`、`npm run build`、`git diff --check`。
-- [ ] 提交推送 `codex/console`，创建以 `codex/verification` 为 base 的堆叠 PR；记录未实现的正式 10 万/100 万行与故障/延迟三次实验，不把预实验冒充正式结果。
+- [x] 提交推送 `codex/console`，创建以 `codex/verification` 为 base 的堆叠 PR #7；记录未实现的正式 10 万/100 万行与故障/延迟三次实验，不把预实验冒充正式结果。
 
 ## 验证记录（2026-10-19）
 
