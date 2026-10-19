@@ -1,6 +1,7 @@
 package com.databridge.task;
 
 import com.databridge.copy.CopyTable;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.sql.SQLException;
@@ -28,7 +29,7 @@ public final class TaskRepository {
                     """, taskId, table.sourceSchema(), table.sourceTable(),
                     table.targetSchema(), table.targetTable());
         } catch (DuplicateKeyException e) {
-            throw new IllegalArgumentException("A task already owns target " + table.targetQualifiedName(), e);
+            throw new TargetAlreadyOwnedException(table.targetQualifiedName(), e);
         }
         return taskId;
     }
@@ -42,6 +43,14 @@ public final class TaskRepository {
                 new CopyTable(row.getString(1), row.getString(2),
                         row.getString(3), row.getString(4)),
                 row.getString(5), row.getString(6), row.getString(7)), taskId);
+    }
+
+    public List<UUID> recoverableTaskIds() {
+        return jdbc.queryForList("""
+                SELECT task_id FROM databridge_meta.sync_task
+                WHERE status IN ('CAPTURING', 'COPYING', 'REPLAYING', 'STREAMING')
+                ORDER BY created_at, task_id
+                """, UUID.class);
     }
 
     public void start(UUID taskId) {
@@ -138,4 +147,10 @@ public final class TaskRepository {
 
     public record TaskRecord(UUID taskId, CopyTable table, String status,
                              String resumeStatus, String errorMessage) { }
+
+    public static final class TargetAlreadyOwnedException extends IllegalArgumentException {
+        TargetAlreadyOwnedException(String target, Throwable cause) {
+            super("A task already owns target " + target, cause);
+        }
+    }
 }

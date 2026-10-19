@@ -15,6 +15,8 @@
 |---|---|
 | `backend/` | Spring Boot 后端源码、单元测试和后端构建文件 |
 | `backend/src/main/java/com/databridge/` | 后端 Java 代码；按 `cdc/`、`task/`、`copy/`、`verify/` 业务责任分包，不按 controller/service/repository 全局分层 |
+| `backend/src/main/java/com/databridge/config/` | Spring Boot 双库连接、CDC 属性与任务运行器装配；配置类名用 `*Configuration`，不存放业务状态或凭据文件 |
+| `backend/src/main/resources/application.yml` | 可提交的非秘密运行配置；数据库连接信息只引用环境变量，不写真实密码；与源码一起保留 |
 | `backend/src/main/resources/db/migration/` | PostgreSQL 元数据迁移脚本，使用 Flyway `V<序号>__<snake_case>.sql` 命名；只追加新版本，不改已经运行过的版本 |
 | `backend/src/main/resources/META-INF/services/` | Java ServiceLoader 服务声明；仅登记需要嵌入式加载的 Debezium 扩展，文件名使用接口全限定名，随源码保留，不作临时清理 |
 | `backend/src/test/java/com/databridge/` | 对应生产包的单元与集成测试；集成测试用 `*IT.java` 命名 |
@@ -48,6 +50,7 @@
 - 首次复制前必须取得本任务持久化 CDC offset。`no_data` 快照通知本身不产生 offset；源库预置 `sync_probe` 表，CDC 账号仅对其额外具有 INSERT 权限。每次启动或恢复收到快照完成通知后都写入新探针，并等待该探针事件入库及本任务 offset 存在，以证明当前 Engine 已实际捕获；探针事件应用时只推进游标，不写业务表。缺少探针表或权限即拒绝启动，不以固定休眠或其他任务的 offset 代替。
 - 首版 `TaskCoordinator` 每实例只运行一个任务，进程内同一任务只允许一个运行器；跨进程并发运行尚无数据库 fencing，部署必须保证单个后端进程。暂停返回后不得再启动新的复制/回放批次，CDC 继续入日志；停止等待运行器和 Engine 退出。
 - 任务失败仅持久化异常类型链和 SQLState，不持久化原始异常文本、连接串或密码。
+- 首版 HTTP API 只绑定 `127.0.0.1`，未实现身份认证，不向局域网或公网暴露；响应不得包含数据库密码、JDBC URL 或原始异常文本。
 - 首版时间映射固定为：MySQL `DATETIME` 按无时区墙上时间写入 PostgreSQL `timestamp without time zone`；MySQL `TIMESTAMP` 在源连接会话设为 UTC 后，按 UTC 墙上时间写入同类目标列。任务创建时须拒绝不同的目标时间列类型；未来 `RowMapper` 需让 CDC 与全量路径采用同一语义。
 - 只在源端停止写入、CDC 追平后进行确定性一致性校验；在线校验属于扩展研究。
 
@@ -70,4 +73,4 @@
 
 - 原始文档为项目根目录的 `基于_Spring_Boot_的异构数据库迁移与增量同步平台的设计与实现_v2.md`。
 - 已建立公开 Git 仓库 `fengye102/databridge`；2026-10-19 用户确认开始按核心链路设计实施。先验证真实 CDC 捕获、事件持久化、去重、顺序与恢复，再进入全量迁移；前端最后开发。
-- CDC 事件入库、持久就绪探针、FullCopyWorker、EventApplier、任务创建前校验和 Java 层 TaskCoordinator 已通过真实双库专项测试；当前尚未实现共享 RowMapper、Verifier、TaskApi 与前端，Spring Boot 入口尚未暴露可配置的运行任务入口。依赖版本记录：本机 JDK 23.0.2、Maven 3.9.16；后端按 Java 21 编译，Spring Boot 3.5.16、Debezium 3.7.0.Final；数据库 MySQL 8.4.11、PostgreSQL 17.11。
+- CDC 事件入库、持久就绪探针、FullCopyWorker、EventApplier、任务创建前校验、TaskCoordinator 与本机 HTTP 运行入口已通过真实双库专项测试；当前尚未实现共享 RowMapper、Verifier、校验报告 API 与前端。依赖版本记录：本机 JDK 23.0.2、Maven 3.9.16；后端按 Java 21 编译，Spring Boot 3.5.16、Debezium 3.7.0.Final；数据库 MySQL 8.4.11、PostgreSQL 17.11。

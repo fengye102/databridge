@@ -1,0 +1,23 @@
+server:
+  address: 127.0.0.1
+  port: ${DATABRIDGE_HTTP_PORT:8080}
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
+
+databridge:
+  source:
+    jdbc-url: ${DATABRIDGE_SOURCE_JDBC_URL}
+    username: ${DATABRIDGE_SOURCE_USERNAME}
+    password: ${DATABRIDGE_SOURCE_PASSWORD}
+  target:
+    jdbc-url: ${DATABRIDGE_TARGET_JDBC_URL}
+    username: ${DATABRIDGE_TARGET_USERNAME}
+    password: ${DATABRIDGE_TARGET_PASSWORD}
+  mysql:
+    host: ${DATABRIDGE_MYSQL_HOST:127.0.0.1}
+    port: ${DATABRIDGE_MYSQL_PORT:3307}
+    database: ${DATABRIDGE_MYSQL_DATABASE:databridge_source}
+    server-id: ${DATABRIDGE_MYSQL_SERVER_ID:5402}
+  copy-batch-size: ${DATABRIDGE_COPY_BATCH_SIZE:500}

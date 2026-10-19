@@ -113,6 +113,13 @@ public final class TaskCoordinator implements AutoCloseable {
         return repository.get(taskId);
     }
 
+    Properties settingsFor(UUID taskId) {
+        var perTask = new Properties();
+        perTask.putAll(cdcSettings);
+        perTask.setProperty("topic.prefix", "databridge_" + taskId.toString().replace("-", ""));
+        return perTask;
+    }
+
     private void requireOpen() {
         if (closed) {
             throw new IllegalStateException("TaskCoordinator is closed");
@@ -186,7 +193,7 @@ public final class TaskCoordinator implements AutoCloseable {
         public void run() {
             try (var capture = new CdcCapture(taskId,
                     table.sourceSchema() + "." + table.sourceTable(),
-                    cdcSettings, new CdcEventRepository(target), source)) {
+                    settingsFor(taskId), new CdcEventRepository(target), source)) {
                 capture.start();
                 capture.awaitReady(Duration.ofSeconds(30));
                 if (recoverPaused && repository.get(taskId).status().equals("CAPTURING")) {

@@ -2,7 +2,7 @@
 
 基于 Spring Boot 的 MySQL → PostgreSQL 全量迁移与增量同步毕业设计项目。
 
-**当前阶段：CDC、全量复制、事件回放、任务创建校验和 Java 层任务状态机已通过真实双库测试。** 核心链路采用“先捕获并持久化 CDC 事件、执行 JDBC 全量、再按序回放并持续同步”，避免迟到的全量批次覆盖新事件。统一的 Spring Boot 运行入口、校验报告、HTTP API 和前端仍待实现。
+**当前阶段：CDC、全量复制、事件回放、任务状态机与本机 HTTP 运行入口已通过真实双库测试。** 核心链路采用“先捕获并持久化 CDC 事件、执行 JDBC 全量、再按序回放并持续同步”，避免迟到的全量批次覆盖新事件。静默窗口校验报告和前端仍待实现。
 
 ## 文档
 
@@ -68,6 +68,32 @@ mvn clean verify -Pintegration
 
 `CdcCapture.awaitReady` 不把 Engine 启动或 `no_data` 快照结束误判为可恢复。每次启动或恢复收到快照通知后，它向同一源库的 `sync_probe` 写入新标记，等待该标记事件入库及本任务 JDBC offset 存在，确认当前 Engine 实际捕获后才允许全量复制或恢复应用；探针事件回放时仅推进游标。`TaskPreflight` 在创建任务前检查两端单列 `id` 主键、列兼容性、目标空表和探针表；`sync_task` 对目标表设置唯一约束。运行时不保存源/目标数据库密码。
 
-`TaskCoordinator` 提供 Java API：创建、启动、暂停、恢复、停止、状态读取和关闭。每实例只运行一个任务；进程内阻止同一任务重复启动。`PAUSED` 保持 CDC 捕获但停止复制/应用，`STOPPED` 等待运行器和 Engine 退出；再启动从持久检查点/游标恢复。`FAILED` 保留阶段及不含凭据的异常类型/SQLState。首版必须单进程部署，跨进程运行锁尚未实现；调用方需要注入源/目标 `DataSource` 与每任务唯一的 Debezium 配置。
+`TaskCoordinator` 提供创建、启动、暂停、恢复、停止、状态读取和关闭。每实例只运行一个任务；进程内阻止同一任务重复启动。`PAUSED` 保持 CDC 捕获但停止复制/应用，`STOPPED` 等待运行器和 Engine 退出；再启动从持久检查点/游标恢复。`FAILED` 保留阶段及不含凭据的异常类型/SQLState。每任务 CDC 前缀由任务 UUID 稳定派生，进程重启时自动恢复唯一一个持久运行任务。首版必须单进程部署，跨进程运行锁尚未实现。
 
-集成测试使用 Testcontainers 临时创建双库和故障注入对象，结束后自动清理，不读取或修改 `infra/.env` 与开发数据库数据。此阶段的 Spring Boot 入口尚未接入任务管理和 HTTP API；运行入口本身不会启动同步任务。下一步实现统一配置/启动入口、静默窗口一致性校验，再接入 API。
+集成测试使用 Testcontainers 临时创建双库和故障注入对象，结束后自动清理，不读取或修改 `infra/.env` 与开发数据库数据。
+
+## 本机 HTTP 运行入口
+
+先启动上述 Compose 双库，再在另一 PowerShell 终端运行：
+
+```powershell
+& 'D:\code\Program\毕设\backend\run-local.ps1'
+```
+
+脚本只读取未跟踪的 `infra/.env`，将 MySQL/PostgreSQL 用户和密码传给当前 Maven/Java 进程，不显示密码；也可自行设置 `DATABRIDGE_SOURCE_JDBC_URL`、`DATABRIDGE_SOURCE_USERNAME`、`DATABRIDGE_SOURCE_PASSWORD`、`DATABRIDGE_TARGET_JDBC_URL`、`DATABRIDGE_TARGET_USERNAME`、`DATABRIDGE_TARGET_PASSWORD` 后在 `backend/` 执行 `mvn spring-boot:run`。CDC 连接使用相同的源库账号；远程数据库还应设置 `DATABRIDGE_MYSQL_HOST`、`DATABRIDGE_MYSQL_PORT`、`DATABRIDGE_MYSQL_DATABASE` 与 `DATABRIDGE_MYSQL_SERVER_ID`。每任务 CDC 前缀固定为 `databridge_<task-uuid>`，不受进程配置变化影响。默认复制批次为 500，可用 `DATABRIDGE_COPY_BATCH_SIZE` 调整。
+
+Spring Boot 启动时由 Flyway 自动迁移目标库元数据。HTTP **只监听 `127.0.0.1:8080`，没有身份认证，不得直接向局域网或公网暴露**。创建任务前须手动建好同结构、空的 PostgreSQL 目标业务表；MySQL 源表须符合项目规则。
+
+```powershell
+$api = 'http://127.0.0.1:8080/api/tasks'
+$body = @{ sourceSchema = 'databridge_source'; sourceTable = 'items'; targetSchema = 'business'; targetTable = 'items' } | ConvertTo-Json
+$task = Invoke-RestMethod -Method Post -Uri $api -ContentType 'application/json' -Body $body
+$id = $task.taskId
+Invoke-RestMethod -Method Post -Uri "$api/$id/start"
+Invoke-RestMethod -Method Get -Uri "$api/$id"
+Invoke-RestMethod -Method Post -Uri "$api/$id/pause"
+Invoke-RestMethod -Method Post -Uri "$api/$id/resume"
+Invoke-RestMethod -Method Post -Uri "$api/$id/stop"
+```
+
+`start` 异步返回 202；通过查询状态等待 `STREAMING`。非法建任务请求返回 400、目标表已被任务占用返回 409、未知任务返回 404、非法状态转换返回 409；API 不返回原始异常或凭据。尚无任务列表、进度指标、静默窗口校验及报告接口；当前 API 不是完整管理平台。
