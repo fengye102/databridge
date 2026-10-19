@@ -32,7 +32,7 @@
 ## 4. 组件责任
 
 - `TaskCoordinator`：唯一任务状态机，校验、启动、暂停、恢复、停止和失败处理。状态为 `CREATED → CAPTURING → COPYING → REPLAYING → STREAMING`；`PAUSED` 保留原阶段，`FAILED` 保留错误原因和可恢复信息。
-- `CdcCapture`：配置一个 MySQL Debezium Engine，首次启动用 `snapshot.mode=no_data`；使用 PostgreSQL 的持久化 offset 与 schema-history 存储；将业务源表的行变更按接收顺序写入事件日志。集成测试额外捕获专用 `sync_probe` 表。`schema_only` 已弃用。[Debezium MySQL 快照模式](https://debezium.io/documentation/reference/stable/connectors/mysql.html)
+- `CdcCapture`：配置一个 MySQL Debezium Engine，首次启动用 `snapshot.mode=no_data`；使用 PostgreSQL 的持久化 offset 与 schema-history 存储；将业务源表及专用 `sync_probe` 表的行变更按接收顺序写入事件日志。`schema_only` 已弃用。[Debezium MySQL 快照模式](https://debezium.io/documentation/reference/stable/connectors/mysql.html)
 - `FullCopyWorker`：从已固定的高水位以下按主键读取，转换后批量 UPSERT；数据和检查点同事务提交。它不读取事件日志，也不在 `REPLAYING` 或 `STREAMING` 状态运行。
 - `EventApplier`：按事件日志序列号应用 INSERT/UPDATE 的最终行值和 DELETE；业务写入与应用游标同事务提交。它不在 `COPYING` 状态运行。
 - `RowMapper`：对 JDBC 行与 Debezium 行变更产生相同的目标列值，单元测试用同一组类型边界样本验证。
@@ -58,7 +58,7 @@
 ## 6. 启动、全量与衔接时序
 
 1. 创建任务时检查 MySQL/PG 连接、表结构、源主键、目标空表、目标唯一约束和无同表运行任务。
-2. 启动 `CdcCapture`，等待 Debezium 初始 `no_data` schema 快照 `COMPLETED`（恢复时可能 `SKIPPED`）通知。真实双库测试证明新任务此时 JDBC offset 表仍为空，故不能立刻复制。每任务唯一 `topic.prefix` 的 Engine 同时捕获业务表和源库预置 `sync_probe(id BIGINT AUTO_INCREMENT PRIMARY KEY, marker CHAR(36))`；收到快照通知后，用只对该表额外有 INSERT 权限的 CDC 账号写入 UUID 标记，等待本任务的 JDBC offset 持久化，之后才能进入 `COPYING`。探针事件同样入库，应用时只推进游标。超时、`ABORTED`、缺表/权限或 Engine 错误均失败；不以固定休眠或其他任务的 offset 代替。[Debezium 3.7 快照通知](https://debezium.io/documentation/reference/3.7/configuration/notification.html)
+2. 启动 `CdcCapture`，等待 Debezium 初始 `no_data` schema 快照 `COMPLETED`（恢复时可能 `SKIPPED`）通知。真实双库测试证明新任务此时 JDBC offset 表仍为空，故不能立刻复制。每任务唯一 `topic.prefix` 的 Engine 同时捕获业务表和源库预置 `sync_probe(id BIGINT AUTO_INCREMENT PRIMARY KEY, marker CHAR(36))`；**每次启动或恢复**收到通知后，用只对该表额外有 INSERT 权限的 CDC 账号写入新的 UUID 标记，等待该标记事件入库且本任务 JDBC offset 存在，证明当前 Engine 已实际捕获，之后才能进入 `COPYING` 或恢复原阶段。探针事件应用时只推进游标。超时、`ABORTED`、缺表/权限或 Engine 错误均失败；不以固定休眠或其他任务的 offset 代替。[Debezium 3.7 快照通知](https://debezium.io/documentation/reference/3.7/configuration/notification.html)
 3. 在 CDC 就绪后查询 `MAX(id)`，写入 `full_checkpoint.high_watermark`；空表以完成全量处理。此后插入的行即使主键落在高水位以下，也由 CDC 回放覆盖。
 4. 全量每批执行 `WHERE id > :last_id AND id <= :high_watermark ORDER BY id LIMIT :batch_size`。以**本批最后实际读取的主键**推进检查点；空结果即完成。数据写入与检查点更新在一个 PostgreSQL 事务。
 5. 全量完成标志持久化后进入 `REPLAYING`。按 `sequence > event_cursor.sequence ORDER BY sequence` 读取事件，逐批应用；每批业务写入与游标同事务提交。未知类型、损坏事件或目标写入失败时暂停应用并记录 `FAILED`，游标不越过失败事件。

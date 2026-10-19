@@ -2,7 +2,7 @@
 
 基于 Spring Boot 的 MySQL → PostgreSQL 全量迁移与增量同步毕业设计项目。
 
-**当前阶段：CDC、全量复制、事件回放和任务创建校验已通过真实双库测试，完整任务编排尚未完成。** 核心链路采用“先捕获并持久化 CDC 事件、执行 JDBC 全量、再按序回放并持续同步”，避免迟到的全量批次覆盖新事件。任务状态机、校验报告、HTTP API 和前端仍待实现。
+**当前阶段：CDC、全量复制、事件回放、任务创建校验和 Java 层任务状态机已通过真实双库测试。** 核心链路采用“先捕获并持久化 CDC 事件、执行 JDBC 全量、再按序回放并持续同步”，避免迟到的全量批次覆盖新事件。统一的 Spring Boot 运行入口、校验报告、HTTP API 和前端仍待实现。
 
 ## 文档
 
@@ -66,6 +66,8 @@ mvn clean verify -Pintegration
 
 `EventApplier` 仅在全量检查点标记完成后运行，按 `cdc_event.sequence` 回放 `c/u/d`，并将目标行变更与 `event_cursor.last_sequence` 在同一 PostgreSQL 事务提交。它会拒绝错误来源表、缺列、主键不符和不支持的目标类型；失败批次不推进游标。真实 Binlog 贯通测试已覆盖全量期间更新与删除、低于固定高水位的新插入，以及 DECIMAL、JSON、DATETIME/TIMESTAMP 的最终值。
 
-`CdcCapture.awaitReady` 不把 Engine 启动或 `no_data` 快照结束误判为可恢复。它收到快照完成通知后写入同一源库的 `sync_probe`，直到本任务的 JDBC offset 持久化才允许全量复制；探针事件入日志，回放时仅推进游标。`TaskPreflight` 在创建任务前检查两端单列 `id` 主键、列兼容性、目标空表和探针表；`sync_task` 对目标表设置唯一约束。运行时不保存源/目标数据库密码。
+`CdcCapture.awaitReady` 不把 Engine 启动或 `no_data` 快照结束误判为可恢复。每次启动或恢复收到快照通知后，它向同一源库的 `sync_probe` 写入新标记，等待该标记事件入库及本任务 JDBC offset 存在，确认当前 Engine 实际捕获后才允许全量复制或恢复应用；探针事件回放时仅推进游标。`TaskPreflight` 在创建任务前检查两端单列 `id` 主键、列兼容性、目标空表和探针表；`sync_task` 对目标表设置唯一约束。运行时不保存源/目标数据库密码。
 
-集成测试使用 Testcontainers 临时创建双库和故障注入对象，结束后自动清理，不读取或修改 `infra/.env` 与开发数据库数据。此阶段的 Spring Boot 入口尚未接入任务管理和 HTTP API；运行入口本身不会启动同步任务。下一步实现任务状态机和静默窗口一致性校验，再接入 API。
+`TaskCoordinator` 提供 Java API：创建、启动、暂停、恢复、停止、状态读取和关闭。每实例只运行一个任务；进程内阻止同一任务重复启动。`PAUSED` 保持 CDC 捕获但停止复制/应用，`STOPPED` 等待运行器和 Engine 退出；再启动从持久检查点/游标恢复。`FAILED` 保留阶段及不含凭据的异常类型/SQLState。首版必须单进程部署，跨进程运行锁尚未实现；调用方需要注入源/目标 `DataSource` 与每任务唯一的 Debezium 配置。
+
+集成测试使用 Testcontainers 临时创建双库和故障注入对象，结束后自动清理，不读取或修改 `infra/.env` 与开发数据库数据。此阶段的 Spring Boot 入口尚未接入任务管理和 HTTP API；运行入口本身不会启动同步任务。下一步实现统一配置/启动入口、静默窗口一致性校验，再接入 API。

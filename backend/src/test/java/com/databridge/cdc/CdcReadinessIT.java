@@ -1,6 +1,7 @@
 package com.databridge.cdc;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.sql.DriverManager;
 import java.time.Duration;
@@ -64,12 +65,40 @@ class CdcReadinessIT {
             insert(1);
             awaitEvent(capture, taskId, 1);
         }
+        int priorProbeRows = sourceProbeRows();
+        int priorProbeEvents = probeEventRows(taskId);
         try (var capture = new CdcCapture(
                 taskId, "databridge_source.readiness_items", settings, repository, probeSource)) {
             capture.start();
             capture.awaitReady(Duration.ofSeconds(30));
+            assertEquals(priorProbeRows + 1, sourceProbeRows(),
+                    "restart must write a fresh probe rather than trust an old offset");
+            assertEquals(priorProbeEvents + 1, probeEventRows(taskId),
+                    "restart must capture the fresh probe before readiness");
             insert(2);
             awaitEvent(capture, taskId, 2);
+        }
+    }
+
+    private static int sourceProbeRows() throws Exception {
+        try (var connection = DriverManager.getConnection(mysql.getJdbcUrl(), "root", "test");
+             var statement = connection.createStatement();
+             var result = statement.executeQuery("SELECT COUNT(*) FROM sync_probe")) {
+            result.next();
+            return result.getInt(1);
+        }
+    }
+
+    private static int probeEventRows(UUID taskId) throws Exception {
+        try (var connection = target.getConnection(); var statement = connection.prepareStatement("""
+                SELECT COUNT(*) FROM databridge_meta.cdc_event
+                WHERE task_id = ? AND table_name = 'databridge_source.sync_probe'
+                """)) {
+            statement.setObject(1, taskId);
+            try (var result = statement.executeQuery()) {
+                result.next();
+                return result.getInt(1);
+            }
         }
     }
 

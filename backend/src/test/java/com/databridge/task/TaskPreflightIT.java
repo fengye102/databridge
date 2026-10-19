@@ -2,6 +2,7 @@ package com.databridge.task;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import com.databridge.copy.CopyTable;
 import java.sql.DriverManager;
@@ -115,6 +116,29 @@ class TaskPreflightIT {
         executeSource("DROP TABLE sync_probe");
         executeSource("CREATE TABLE sync_probe (id BIGINT PRIMARY KEY, marker CHAR(36) NOT NULL)");
         assertRejected(table("orders", "orders"));
+    }
+
+    @Test
+    void failureReasonDoesNotPersistCredentialText() throws Exception {
+        var repository = new TaskRepository(source, target);
+        var taskId = repository.create(table("orders", "orders"));
+        repository.start(taskId);
+        repository.fail(taskId, new IllegalStateException("password=topsecret"));
+        assertEquals("FAILED", repository.get(taskId).status());
+        assertFalse(repository.get(taskId).errorMessage().contains("topsecret"));
+    }
+
+    @Test
+    void repeatedCaptureFailurePreservesOriginalCopyResumeStage() throws Exception {
+        var repository = new TaskRepository(source, target);
+        var taskId = repository.create(table("orders", "orders"));
+        repository.start(taskId);
+        repository.advance(taskId, "CAPTURING", "COPYING");
+        repository.fail(taskId, new IllegalStateException("copy failed"));
+        assertEquals("COPYING", repository.get(taskId).resumeStatus());
+        repository.start(taskId);
+        repository.fail(taskId, new IllegalStateException("capture failed on restart"));
+        assertEquals("COPYING", repository.get(taskId).resumeStatus());
     }
 
     private static void assertRejected(CopyTable table) throws Exception {

@@ -40,7 +40,7 @@
 
 - [x] 写真实双库失败测试：`CdcCapture.awaitReady(Duration)` 在快照完成且 offset 持久后返回；首启与重启均有断言。关闭/失败唤醒等待者仍需专项用例。
 - [x] 运行 `mvn --batch-mode -q '-Dit.test=CdcReadinessIT' verify -Pintegration`，确认缺少接口而失败。
-- [x] 用 Debezium 3.7 `NotificationChannel` SPI 注册 `databridge-ready` 通道，监听 `Initial Snapshot` 的 `COMPLETED/SKIPPED/ABORTED`；按 `topic.prefix` 精确路由到任务（通知 `connector_name` 实测为该值，不是 Engine 的 `name`）。`CdcCapture` 同时捕获业务表与 `sync_probe`，快照完成后写探针，限时等待本任务 JDBC offset 落库；超时/错误失败并清理。`EventApplier` 对探针事件仅推进游标。
+- [x] 用 Debezium 3.7 `NotificationChannel` SPI 注册 `databridge-ready` 通道，监听 `Initial Snapshot` 的 `COMPLETED/SKIPPED/ABORTED`；按 `topic.prefix` 精确路由到任务（通知 `connector_name` 实测为该值，不是 Engine 的 `name`）。`CdcCapture` 同时捕获业务表与 `sync_probe`，每次启动/恢复收到快照通知后写新探针，限时等待新探针事件入库及本任务 JDBC offset 存在；超时/错误失败并清理。`EventApplier` 对探针事件仅推进游标。
 - [x] 专项测试通过；与 Task 2 合并为当前阶段提交。
 
 ### Task 2: 任务持久化与运行前校验
@@ -52,10 +52,10 @@
 
 ### Task 3: 串行任务运行器与恢复
 
-- [ ] 写失败 IT：创建/启动经 `CAPTURING → COPYING → REPLAYING → STREAMING`；全量期间 UPDATE/DELETE 后目标正确；暂停只停复制/应用而 CDC 继续入日志；停止保留位点；新 coordinator 实例从持久检查点/游标恢复；CDC/PG 故障进入 `FAILED` 且有原因。
-- [ ] 执行 `mvn --batch-mode -q '-Dit.test=TaskCoordinatorIT' verify -Pintegration`，确认状态机缺失而失败。
-- [ ] 实现每任务单线程运行器，先启动并等待 CDC 就绪，再调用已有 FullCopyWorker/EventApplier；有限批次、暂停检测、关闭顺序和失败处理均明确定义。重新启动读取状态/检查点，不用无条件清空目标或重置游标。
-- [ ] `mvn --batch-mode -q clean verify -Pintegration` 全通过并记录结果，提交 `feat(task): orchestrate and resume migration stages`。
+- [x] 写失败 IT：创建/启动经 `CAPTURING → COPYING → REPLAYING → STREAMING`；全量期间 UPDATE/DELETE 后目标正确；暂停只停复制/应用而 CDC 继续入日志；停止保留位点；新 coordinator 实例从持久检查点/游标恢复；CDC/PG 故障进入 `FAILED` 且有原因。另测进程内重复运行器拒绝及持久 `PAUSED` 恢复。
+- [x] 执行 `mvn --batch-mode -q '-Dit.test=TaskCoordinatorIT' verify -Pintegration`，确认状态机缺失而失败。
+- [x] 实现每任务单线程运行器，先启动并等待 CDC 就绪，再调用已有 FullCopyWorker/EventApplier；有限批次、暂停检测、关闭顺序和失败处理均明确定义。重新启动读取状态/检查点，不用无条件清空目标或重置游标。首版每实例一个运行器、进程内同任务唯一；跨进程 fencing 留待后续。
+- [x] 2026-10-19 执行 `mvn --batch-mode -q clean verify -Pintegration`，41 测试、0 failures/errors/skips；提交 `feat(task): orchestrate and resume migration stages`。
 
 ## Exit Gate
 

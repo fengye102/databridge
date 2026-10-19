@@ -4,6 +4,8 @@ import io.debezium.engine.DebeziumEngine;
 import io.debezium.engine.RecordChangeEvent;
 import io.debezium.engine.format.ChangeEventFormat;
 import io.debezium.embedded.Connect;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import java.io.IOException;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -28,6 +30,7 @@ public final class CdcCapture implements AutoCloseable {
     private final Properties settings;
     private final CdcEventRepository repository;
     private final CdcRecordMapper mapper = new CdcRecordMapper();
+    private final JsonMapper json = new JsonMapper();
     private final AtomicReference<Throwable> failure = new AtomicReference<>();
     private final ExecutorService executor;
     private final String connectorName;
@@ -35,6 +38,8 @@ public final class CdcCapture implements AutoCloseable {
     private final String probeTableName;
     private final DataSource sourceProbe;
     private final AtomicBoolean probeSent = new AtomicBoolean();
+    private final CompletableFuture<Void> probeCaptured = new CompletableFuture<>();
+    private volatile String probeMarker;
     private CompletableFuture<Void> snapshotReady;
     private DebeziumEngine<RecordChangeEvent<SourceRecord>> engine;
     private volatile boolean closing;
@@ -137,10 +142,30 @@ public final class CdcCapture implements AutoCloseable {
             events.add(event);
         }
         repository.insertBatch(taskId, events);
+        String expectedMarker = probeMarker;
+        if (expectedMarker != null) {
+            for (var event : events) {
+                if (isProbeMarker(event, expectedMarker)) {
+                    probeCaptured.complete(null);
+                }
+            }
+        }
         for (var change : records) {
             committer.markProcessed(change);
         }
         committer.markBatchFinished();
+    }
+
+    private boolean isProbeMarker(CdcEvent event, String expectedMarker) {
+        if (!probeTableName.equals(event.tableName()) || !"c".equals(event.operation())
+                || event.afterRowJson() == null) {
+            return false;
+        }
+        try {
+            return expectedMarker.equals(json.readTree(event.afterRowJson()).path("marker").asText());
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("Invalid CDC probe row", e);
+        }
     }
 
     public Throwable failure() {
@@ -165,11 +190,11 @@ public final class CdcCapture implements AutoCloseable {
                 throw new IllegalStateException("Debezium initial snapshot failed");
             }
             if (snapshotReady.isDone()) {
-                if (offsetDurable()) {
-                    return;
-                }
                 if (probeSent.compareAndSet(false, true)) {
                     writeProbe();
+                }
+                if (probeCaptured.isDone() && offsetDurable()) {
+                    return;
                 }
             }
             try {
@@ -181,18 +206,20 @@ public final class CdcCapture implements AutoCloseable {
         }
         throw new IllegalStateException("CDC readiness timed out after " + timeout
                 + "; snapshotSignal=" + snapshotReady.isDone()
+                + "; freshProbeCaptured=" + probeCaptured.isDone()
                 + "; taskOffsetPresent=" + offsetDurable());
     }
 
     private void writeProbe() {
         if (sourceProbe == null) {
-            throw new IllegalStateException("A source probe DataSource is required before the first CDC offset");
+            throw new IllegalStateException("A source probe DataSource is required for CDC readiness");
         }
+        probeMarker = UUID.randomUUID().toString();
         try (var connection = sourceProbe.getConnection();
              var statement = connection.prepareStatement(
                      "INSERT INTO `" + probeTableName.replace(".", "`.`")
                              + "` (`marker`) VALUES (?)")) {
-            statement.setString(1, UUID.randomUUID().toString());
+            statement.setString(1, probeMarker);
             statement.executeUpdate();
         } catch (SQLException e) {
             throw new IllegalStateException("Could not write source CDC readiness probe", e);

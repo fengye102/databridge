@@ -45,7 +45,9 @@
 - CDC 事件应用和应用游标推进必须在同一个 PostgreSQL 事务内。首版保留事件记录，不依赖立即清理后的去重行为。
 - 全量开始时固定每张表的扫描主键上界，避免持续插入使扫描无界；源端主键更新、DDL 变更和无主键表在第一阶段明确拒绝。
 - 运行中出现无法映射的类型、CDC 位点丢失、binlog 被清理或顺序无法保证时，任务进入失败状态，不静默跳过事件。
-- 首次复制前必须取得本任务持久化 CDC offset。`no_data` 快照通知本身不产生 offset；源库预置 `sync_probe` 表，CDC 账号仅对其额外具有 INSERT 权限。快照完成后写入探针并等待本任务 offset 落库；探针事件入事件日志，应用器只推进游标，不写业务表。缺少探针表或权限即拒绝启动，不以固定休眠或其他任务的 offset 代替。
+- 首次复制前必须取得本任务持久化 CDC offset。`no_data` 快照通知本身不产生 offset；源库预置 `sync_probe` 表，CDC 账号仅对其额外具有 INSERT 权限。每次启动或恢复收到快照完成通知后都写入新探针，并等待该探针事件入库及本任务 offset 存在，以证明当前 Engine 已实际捕获；探针事件应用时只推进游标，不写业务表。缺少探针表或权限即拒绝启动，不以固定休眠或其他任务的 offset 代替。
+- 首版 `TaskCoordinator` 每实例只运行一个任务，进程内同一任务只允许一个运行器；跨进程并发运行尚无数据库 fencing，部署必须保证单个后端进程。暂停返回后不得再启动新的复制/回放批次，CDC 继续入日志；停止等待运行器和 Engine 退出。
+- 任务失败仅持久化异常类型链和 SQLState，不持久化原始异常文本、连接串或密码。
 - 首版时间映射固定为：MySQL `DATETIME` 按无时区墙上时间写入 PostgreSQL `timestamp without time zone`；MySQL `TIMESTAMP` 在源连接会话设为 UTC 后，按 UTC 墙上时间写入同类目标列。任务创建时须拒绝不同的目标时间列类型；未来 `RowMapper` 需让 CDC 与全量路径采用同一语义。
 - 只在源端停止写入、CDC 追平后进行确定性一致性校验；在线校验属于扩展研究。
 
@@ -68,4 +70,4 @@
 
 - 原始文档为项目根目录的 `基于_Spring_Boot_的异构数据库迁移与增量同步平台的设计与实现_v2.md`。
 - 已建立公开 Git 仓库 `fengye102/databridge`；2026-10-19 用户确认开始按核心链路设计实施。先验证真实 CDC 捕获、事件持久化、去重、顺序与恢复，再进入全量迁移；前端最后开发。
-- CDC 事件入库、持久就绪探针、FullCopyWorker、EventApplier 和任务创建前校验已通过真实双库测试；当前尚未实现共享 RowMapper、TaskCoordinator、Verifier、TaskApi 与前端，组件尚未被状态机编排为可启动的完整任务。依赖版本记录：本机 JDK 23.0.2、Maven 3.9.16；后端按 Java 21 编译，Spring Boot 3.5.16、Debezium 3.7.0.Final；数据库 MySQL 8.4.11、PostgreSQL 17.11。
+- CDC 事件入库、持久就绪探针、FullCopyWorker、EventApplier、任务创建前校验和 Java 层 TaskCoordinator 已通过真实双库专项测试；当前尚未实现共享 RowMapper、Verifier、TaskApi 与前端，Spring Boot 入口尚未暴露可配置的运行任务入口。依赖版本记录：本机 JDK 23.0.2、Maven 3.9.16；后端按 Java 21 编译，Spring Boot 3.5.16、Debezium 3.7.0.Final；数据库 MySQL 8.4.11、PostgreSQL 17.11。
