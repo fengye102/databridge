@@ -2,6 +2,7 @@ package com.databridge.task;
 
 import com.databridge.copy.CopyTable;
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -15,9 +16,24 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/tasks")
 public class TaskController {
     private final TaskCoordinator coordinator;
+    private final TaskRepository repository;
+    private final TaskProgress progress;
 
-    public TaskController(TaskCoordinator coordinator) {
+    public TaskController(TaskCoordinator coordinator, TaskRepository repository,
+                          TaskProgress progress) {
         this.coordinator = coordinator;
+        this.repository = repository;
+        this.progress = progress;
+    }
+
+    @GetMapping
+    public List<TaskRepository.TaskRecord> list() {
+        return repository.list();
+    }
+
+    @GetMapping("/{taskId}/progress")
+    public TaskProgress.Snapshot progress(@PathVariable UUID taskId) {
+        return progress.get(taskId);
     }
 
     @PostMapping

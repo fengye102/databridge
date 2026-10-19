@@ -85,6 +85,10 @@ public final class Verifier {
         return reports.get(taskId, runId);
     }
 
+    public List<VerificationReport> reports(UUID taskId) {
+        return reports.listRecent(taskId);
+    }
+
     private static VerificationReport inconclusive(
             UUID runId, UUID taskId, String reason, Instant started) {
         return new VerificationReport(runId, taskId, "INCONCLUSIVE",

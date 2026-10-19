@@ -38,6 +38,7 @@
 | `docs/proposals/` | 选题与范围文档；原根目录 v2 文件保留作历史版本 |
 | `docs/superpowers/specs/` | 经确认的模块设计与验收标准 |
 | `docs/superpowers/plans/` | 与设计一一对应的实施计划 |
+| `docs/screenshots/` | 只保存不含凭据/业务原值的固定演示截图，文件名说明页面与视口；更新界面后替换旧截图，不堆积过时版本 |
 | `work/` | 可删除的运行日志、临时导出和实验中间文件；不作为交付物 |
 
 - 文档用小写 kebab-case 文件名，版本写在文件名中，例如 `databridge-proposal-v3.md`。
@@ -59,6 +60,7 @@
 - 任务失败仅持久化异常类型链和 SQLState，不持久化原始异常文本、连接串或密码。
 - 首版 HTTP API 只绑定 `127.0.0.1`，未实现身份认证，不向局域网或公网暴露；响应不得包含数据库密码、JDBC URL 或原始异常文本。
 - 管理界面只消费本机 API，不在浏览器存数据库密码；任务进度以真实持久化检查点和事件游标为准，不用稀疏主键范围伪装完成百分比。页面轮询在隐藏标签或卸载后暂停，不把 `INCONCLUSIVE` 显示成一致。
+- `frontend/dist/` 由 `npm run build` 生成且仍不提交；本机 Spring Boot 可从该目录直接服务前端静态文件，访问地址与 API 同为 `127.0.0.1:18080`。Vite `5173` 仅用于开发热更新，均只绑定本机。
 - 首版时间映射固定为：MySQL `DATETIME` 按无时区墙上时间写入 PostgreSQL `timestamp without time zone`；MySQL `TIMESTAMP` 在源连接会话设为 UTC 后，按 UTC 墙上时间写入同类目标列。任务创建时须拒绝不同的目标时间列类型；未来 `RowMapper` 需让 CDC 与全量路径采用同一语义。
 - 只在源端停止写入、CDC 追平后进行确定性一致性校验；在线校验属于扩展研究。
 - 校验前后各写一次同任务探针并等待应用游标越过探针；若两个探针之间有业务 CDC 事件，报告为 `INCONCLUSIVE`，不得宣称一致或差异确定。差异报告只保存行主键与不一致列名，不保存业务字段原值。
@@ -71,6 +73,7 @@
 - 每项实现必须给出可重复的验证命令和结果；未运行的测试不得写成“已通过”。
 - 数据库密码和连接串通过环境变量或本地未跟踪配置注入，不提交真实凭据。
 - 本地双库环境仅用于开发：MySQL 主机端口 `127.0.0.1:3307`，PostgreSQL 主机端口 `127.0.0.1:15433`；固定补丁版本镜像，MySQL 启用 ROW/FULL Binlog。真实密码写入未跟踪的 `infra/.env`，仓库只保留 `infra/.env.example`。Windows 的动态保留端口可能覆盖 5433，因此 PostgreSQL 改用 15433；调整端口前先检查 `netsh interface ipv4 show excludedportrange protocol=tcp`。
+- 本机 HTTP 默认端口为 `127.0.0.1:18080`，Vite 开发代理指向同一地址。当前机器 `127.0.0.1:8080` 无监听进程却拒绝绑定，改端口前先实测 TCP 绑定；不因此开放外网监听。
 
 ## 5. 清理与保留
 
@@ -82,4 +85,4 @@
 
 - 原始文档为项目根目录的 `基于_Spring_Boot_的异构数据库迁移与增量同步平台的设计与实现_v2.md`。
 - 已建立公开 Git 仓库 `fengye102/databridge`；2026-10-19 用户确认开始按核心链路设计实施。先验证真实 CDC 捕获、事件持久化、去重、顺序与恢复，再进入全量迁移；前端最后开发。
-- CDC 事件入库、持久就绪探针、FullCopyWorker、EventApplier、任务创建前校验、TaskCoordinator、本机 HTTP 运行入口和 Verifier/报告 API 已通过 50 项单元及真实双库测试；当前尚未实现共享 RowMapper 与前端。依赖版本记录：本机 JDK 23.0.2、Maven 3.9.16；后端按 Java 21 编译，Spring Boot 3.5.16、Debezium 3.7.0.Final；数据库 MySQL 8.4.11、PostgreSQL 17.11。
+- CDC 事件入库、持久就绪探针、FullCopyWorker、EventApplier、任务创建前校验、TaskCoordinator、本机 HTTP 运行入口、Verifier/报告 API 与 Vue 运维台已实现；最终完整回归为后端 50 项单元及真实双库测试、前端 9 项测试、生产构建通过。本机演示已完成任务创建、启动、暂停、继续、源端更新后目标端 CDC 可见、两次一致校验；后端进程强制终止后重启，任务自动恢复 `STREAMING` 且历史报告保留。当前尚未实现共享 RowMapper、正式大规模三次实验及论文正文。依赖版本记录：本机 JDK 23.0.2、Maven 3.9.16；后端按 Java 21 编译，Spring Boot 3.5.16、Debezium 3.7.0.Final；数据库 MySQL 8.4.11、PostgreSQL 17.11；前端 Node.js 24.18.0、npm 11.16.0、Vue 3.5.44、Vite 8.3.4、Element Plus 2.14.7。

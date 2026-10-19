@@ -1,10 +1,17 @@
 server:
   address: 127.0.0.1
-  port: ${DATABRIDGE_HTTP_PORT:8080}
+  port: ${DATABRIDGE_HTTP_PORT:18080}
   error:
     include-message: never
     include-stacktrace: never
     include-binding-errors: never
+
+spring:
+  web:
+    resources:
+      static-locations:
+        - classpath:/static/
+        - file:../frontend/dist/
 
 databridge:
   source:

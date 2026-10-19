@@ -1,6 +1,8 @@
 package com.databridge.config;
 
 import com.databridge.task.TaskCoordinator;
+import com.databridge.task.TaskCatalog;
+import com.databridge.task.TaskProgress;
 import com.databridge.task.TaskRecovery;
 import com.databridge.task.TaskRepository;
 import com.databridge.verify.Verifier;
@@ -70,6 +72,21 @@ public class RuntimeConfiguration {
             @Qualifier("sourceDataSource") DataSource source,
             @Qualifier("targetDataSource") DataSource target) {
         return new TaskRepository(source, target);
+    }
+
+    @Bean
+    TaskCatalog taskCatalog(
+            @Qualifier("sourceDataSource") DataSource source,
+            @Qualifier("targetDataSource") DataSource target,
+            @Value("${databridge.mysql.database}") String sourceDatabase) {
+        return new TaskCatalog(source, target, sourceDatabase);
+    }
+
+    @Bean
+    TaskProgress taskProgress(
+            @Qualifier("sourceDataSource") DataSource source,
+            @Qualifier("targetDataSource") DataSource target) {
+        return new TaskProgress(source, target);
     }
 
     @Bean

@@ -95,6 +95,15 @@ public final class VerificationRepository {
                 header.reasonCode(), header.startedAt(), header.completedAt(), differences);
     }
 
+    public List<VerificationReport> listRecent(UUID taskId) {
+        jdbc.queryForObject("SELECT task_id FROM databridge_meta.sync_task WHERE task_id = ?",
+                UUID.class, taskId);
+        return jdbc.queryForList("""
+                SELECT run_id FROM databridge_meta.verification_run
+                WHERE task_id = ? ORDER BY completed_at DESC, run_id DESC LIMIT 20
+                """, UUID.class, taskId).stream().map(runId -> get(taskId, runId)).toList();
+    }
+
     private List<String> parseColumns(String raw) {
         try {
             return json.readValue(raw, new TypeReference<ArrayList<String>>() { });

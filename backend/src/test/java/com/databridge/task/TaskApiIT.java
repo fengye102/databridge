@@ -77,6 +77,13 @@ class TaskApiIT {
     @Test
     void bootMigratesMetadataAndHttpControlsDurableTaskWithoutExposingSecrets() throws Exception {
         String root = "/api/tasks";
+        JsonNode catalog = get("/api/catalog");
+        assertTrue(catalog.path("source").path("reachable").asBoolean());
+        assertTrue(catalog.path("target").path("reachable").asBoolean());
+        assertTrue(containsTable(catalog.path("source").path("tables"), "api_items"));
+        assertFalse(containsTable(catalog.path("source").path("tables"), "sync_probe"));
+        assertTrue(containsTable(catalog.path("target").path("tables"), "api_items"));
+        assertFalse(catalog.toString().contains("capturepass"));
         ResponseEntity<JsonNode> created = http.postForEntity(root, Map.of(
                 "sourceSchema", "databridge_source", "sourceTable", "api_items",
                 "targetSchema", "business", "targetTable", "api_items"), JsonNode.class);
@@ -84,6 +91,8 @@ class TaskApiIT {
         UUID taskId = UUID.fromString(created.getBody().path("taskId").asText());
         String taskUrl = root + "/" + taskId;
         assertEquals("CREATED", get(taskUrl).path("status").asText());
+        assertEquals(taskId.toString(), get(root).get(0).path("taskId").asText());
+        assertTrue(get(taskUrl + "/progress").path("highWatermark").isNull());
         assertFalse(created.getBody().toString().contains("capturepass"));
         assertFalse(created.getBody().toString().contains(postgres.getPassword()));
 
@@ -100,6 +109,12 @@ class TaskApiIT {
                 http.postForEntity(taskUrl + "/start", null, JsonNode.class).getStatusCode());
         awaitStatus(taskUrl, "STREAMING", Duration.ofSeconds(60));
         awaitTargetName(1, "initial", Duration.ofSeconds(15));
+        JsonNode progress = get(taskUrl + "/progress");
+        assertTrue(progress.path("copyComplete").asBoolean());
+        assertEquals(1, progress.path("highWatermark").asLong());
+        assertEquals(1, progress.path("lastCopiedId").asLong());
+        assertTrue(progress.path("capturedEvents").asLong() >= 1);
+        assertEquals(0, progress.path("pendingEvents").asLong());
 
         String verificationUrl = taskUrl + "/verifications";
         ResponseEntity<JsonNode> verified = http.postForEntity(verificationUrl, null, JsonNode.class);
@@ -108,6 +123,10 @@ class TaskApiIT {
         assertEquals(1, verified.getBody().path("sourceRows").asLong());
         String runId = verified.getBody().path("runId").asText();
         assertEquals(verified.getBody(), get(verificationUrl + "/" + runId));
+        assertEquals(runId, get(verificationUrl).get(0).path("runId").asText());
+        assertEquals(HttpStatus.NOT_FOUND, http.getForEntity(
+                root + "/" + UUID.randomUUID() + "/verifications", JsonNode.class)
+                .getStatusCode());
         assertEquals(HttpStatus.NOT_FOUND, http.getForEntity(
                 verificationUrl + "/" + UUID.randomUUID(), JsonNode.class).getStatusCode());
         assertEquals(HttpStatus.BAD_REQUEST, http.getForEntity(
@@ -153,6 +172,15 @@ class TaskApiIT {
         awaitTargetName(1, "after-recovery", Duration.ofSeconds(20));
         assertEquals(HttpStatus.OK,
                 http.postForEntity(taskUrl + "/stop", null, JsonNode.class).getStatusCode());
+    }
+
+    private static boolean containsTable(JsonNode tables, String name) {
+        for (JsonNode table : tables) {
+            if (name.equals(table.path("table").asText())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private JsonNode get(String url) {

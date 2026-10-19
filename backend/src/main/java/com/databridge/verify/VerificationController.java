@@ -3,6 +3,7 @@ package com.databridge.verify;
 import com.databridge.verify.VerificationRepository.VerificationReport;
 import java.net.URI;
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -32,6 +33,11 @@ public class VerificationController {
         var report = verifier.verify(taskId, timeout, batchSize);
         return ResponseEntity.created(URI.create(
                 "/api/tasks/" + taskId + "/verifications/" + report.runId())).body(report);
+    }
+
+    @GetMapping
+    public List<VerificationReport> list(@PathVariable UUID taskId) {
+        return verifier.reports(taskId);
     }
 
     @GetMapping("/{runId}")

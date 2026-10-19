@@ -45,6 +45,17 @@ public final class TaskRepository {
                 row.getString(5), row.getString(6), row.getString(7)), taskId);
     }
 
+    public List<TaskRecord> list() {
+        return jdbc.query("""
+                SELECT task_id, source_schema, source_table, target_schema, target_table,
+                       status, resume_status, error_message
+                FROM databridge_meta.sync_task ORDER BY created_at DESC, task_id DESC
+                """, (row, ignored) -> new TaskRecord(row.getObject(1, UUID.class),
+                new CopyTable(row.getString(2), row.getString(3),
+                        row.getString(4), row.getString(5)),
+                row.getString(6), row.getString(7), row.getString(8)));
+    }
+
     public List<UUID> recoverableTaskIds() {
         return jdbc.queryForList("""
                 SELECT task_id FROM databridge_meta.sync_task

@@ -2,7 +2,7 @@
 
 基于 Spring Boot 的 MySQL → PostgreSQL 全量迁移与增量同步毕业设计项目。
 
-**当前阶段：CDC、全量复制、事件回放、任务状态机、本机 HTTP 入口及静默窗口校验报告已通过 50 项自动化测试。** 核心链路采用“先捕获并持久化 CDC 事件、执行 JDBC 全量、再按序回放并持续同步”，避免迟到的全量批次覆盖新事件。管理界面仍待开发。
+**当前阶段：CDC、全量复制、事件回放、任务状态机、本机 HTTP 入口、静默窗口校验及 Vue 管理界面已实现。** 核心链路采用“先捕获并持久化 CDC 事件、执行 JDBC 全量、再按序回放并持续同步”，避免迟到的全量批次覆盖新事件。后端已有 50 项单元/双库测试，前端已有 9 项测试；正式大规模实验仍待执行。
 
 ## 文档
 
@@ -10,6 +10,8 @@
 - [选题方案 v3](docs/proposals/databridge-proposal-v3.md)
 - [核心链路设计](docs/superpowers/specs/2026-10-18-databridge-core-design.md)
 - [静默窗口校验设计](docs/superpowers/specs/2026-10-19-databridge-verification-design.md)
+- [本机运维台设计](docs/superpowers/specs/2026-10-19-databridge-console-design.md)
+- [运维台桌面截图](docs/screenshots/databridge-console-desktop.png) / [手机宽度截图](docs/screenshots/databridge-console-mobile.png)
 - [1 万行校验预实验记录](experiments/verification-10000.md)
 - [本地双库环境设计](docs/superpowers/specs/2026-10-18-databridge-local-infra-design.md)
 - [历史选题方案 v2](基于_Spring_Boot_的异构数据库迁移与增量同步平台的设计与实现_v2.md)
@@ -34,7 +36,7 @@ $env:PATH = "$(Split-Path $docker);$env:PATH"
 & 'D:\Dev Tools Manager\7\pwsh.exe' -NoProfile -File "$repo\infra\verify.ps1"
 ```
 
-MySQL 连接：`127.0.0.1:3307`，库 `databridge_source`，用户 `databridge`，密码为 `infra/.env` 的 `MYSQL_PASSWORD`；该用户对业务源表只读，另有 CDC 复制权限及对 `sync_probe` 的 INSERT 权限。PostgreSQL 连接：`127.0.0.1:15433`，库 `databridge_target`，用户 `databridge`，密码为 `POSTGRES_PASSWORD`。两个库目前没有业务表，MySQL 已预置 `sync_probe`。
+MySQL 连接：`127.0.0.1:3307`，库 `databridge_source`，用户 `databridge`，密码为 `infra/.env` 的 `MYSQL_PASSWORD`；该用户对业务源表只读，另有 CDC 复制权限及对 `sync_probe` 的 INSERT 权限。PostgreSQL 连接：`127.0.0.1:15433`，库 `databridge_target`，用户 `databridge`，密码为 `POSTGRES_PASSWORD`。空数据卷初始化时没有业务表，MySQL 已预置 `sync_probe`；演示表由下述脚本额外创建。
 
 停止环境但保留数据：
 
@@ -84,10 +86,10 @@ mvn clean verify -Pintegration
 
 脚本只读取未跟踪的 `infra/.env`，将 MySQL/PostgreSQL 用户和密码传给当前 Maven/Java 进程，不显示密码；也可自行设置 `DATABRIDGE_SOURCE_JDBC_URL`、`DATABRIDGE_SOURCE_USERNAME`、`DATABRIDGE_SOURCE_PASSWORD`、`DATABRIDGE_TARGET_JDBC_URL`、`DATABRIDGE_TARGET_USERNAME`、`DATABRIDGE_TARGET_PASSWORD` 后在 `backend/` 执行 `mvn spring-boot:run`。CDC 连接使用相同的源库账号；远程数据库还应设置 `DATABRIDGE_MYSQL_HOST`、`DATABRIDGE_MYSQL_PORT`、`DATABRIDGE_MYSQL_DATABASE` 与 `DATABRIDGE_MYSQL_SERVER_ID`。每任务 CDC 前缀固定为 `databridge_<task-uuid>`，不受进程配置变化影响。默认复制批次为 500，可用 `DATABRIDGE_COPY_BATCH_SIZE` 调整。
 
-Spring Boot 启动时由 Flyway 自动迁移目标库元数据。HTTP **只监听 `127.0.0.1:8080`，没有身份认证，不得直接向局域网或公网暴露**。创建任务前须手动建好同结构、空的 PostgreSQL 目标业务表；MySQL 源表须符合项目规则。
+Spring Boot 启动时由 Flyway 自动迁移目标库元数据。HTTP **只监听 `127.0.0.1:18080`，没有身份认证，不得直接向局域网或公网暴露**。本机 `8080` 当前无法绑定，已验证 `18080` 可用；如需换端口，同时修改后端环境变量 `DATABRIDGE_HTTP_PORT` 与前端 Vite 代理。创建任务前须手动建好同结构、空的 PostgreSQL 目标业务表；MySQL 源表须符合项目规则。
 
 ```powershell
-$api = 'http://127.0.0.1:8080/api/tasks'
+$api = 'http://127.0.0.1:18080/api/tasks'
 $body = @{ sourceSchema = 'databridge_source'; sourceTable = 'items'; targetSchema = 'business'; targetTable = 'items' } | ConvertTo-Json
 $task = Invoke-RestMethod -Method Post -Uri $api -ContentType 'application/json' -Body $body
 $id = $task.taskId
@@ -95,10 +97,53 @@ Invoke-RestMethod -Method Post -Uri "$api/$id/start"
 Invoke-RestMethod -Method Get -Uri "$api/$id"
 Invoke-RestMethod -Method Post -Uri "$api/$id/pause"
 Invoke-RestMethod -Method Post -Uri "$api/$id/resume"
- # 源端停止写入，等待状态为 STREAMING 后再做确定性校验
+# 源端停止写入，等待状态为 STREAMING 后再做确定性校验
 $report = Invoke-RestMethod -Method Post -Uri "$api/$id/verifications"
 Invoke-RestMethod -Method Get -Uri "$api/$id/verifications/$($report.runId)"
 Invoke-RestMethod -Method Post -Uri "$api/$id/stop"
 ```
 
-`start` 异步返回 202；通过查询状态等待 `STREAMING`。校验接口同步返回 201，报告为 `CONSISTENT`、`DIFFERENT` 或 `INCONCLUSIVE`；后者含原因码，表示源端窗口内写入、探针超时或扫描失败，不能作为一致结论。校验采用前后两个 CDC 探针，等应用游标追平，再按 `id` 分批比较；只记录行数、主键与最多 100 条不一致列名，不存业务字段原值。源端必须停写才能获得确定性结论；目标端也不应有其他写入者。默认校验批次 500、每个探针超时 30 秒，可用 `DATABRIDGE_VERIFICATION_BATCH_SIZE`、`DATABRIDGE_VERIFICATION_TIMEOUT_SECONDS` 调整。非法请求返回 400、目标表已被任务占用返回 409、未知任务或报告返回 404、非法状态返回 409；API 不返回原始异常或凭据。尚无任务列表和进度指标；当前 API 不是完整管理平台。
+`start` 异步返回 202；通过查询状态等待 `STREAMING`。校验接口同步返回 201，报告为 `CONSISTENT`、`DIFFERENT` 或 `INCONCLUSIVE`；后者含原因码，表示源端窗口内写入、探针超时或扫描失败，不能作为一致结论。校验采用前后两个 CDC 探针，等应用游标追平，再按 `id` 分批比较；只记录行数、主键与最多 100 条不一致列名，不存业务字段原值。源端必须停写才能获得确定性结论；目标端也不应有其他写入者。默认校验批次 500、每个探针超时 30 秒，可用 `DATABRIDGE_VERIFICATION_BATCH_SIZE`、`DATABRIDGE_VERIFICATION_TIMEOUT_SECONDS` 调整。另有 `GET /api/catalog`、`GET /api/tasks`、`GET /api/tasks/{id}/progress` 和 `GET /api/tasks/{id}/verifications`，分别用于连接/表结构检查、任务列表、持久进度和最近 20 份报告。非法请求返回 400、目标表已被任务占用返回 409、未知任务或报告返回 404、非法状态返回 409；API 不返回原始异常或凭据。
+
+## Vue 本机运维台与演示
+
+前端固定 Vue 3.5.44、Vite 8.3.4、Element Plus 2.14.7，使用 Node.js 24.18.0/npm 11.16.0；`frontend/package-lock.json` 锁定传递依赖。普通演示只需构建前端，然后启动后端，同一端口即可访问页面和 API：
+
+```powershell
+Set-Location 'D:\code\Program\毕设\frontend'
+npm ci
+npm run build
+& 'D:\code\Program\毕设\backend\run-local.ps1'
+# 浏览器打开 http://127.0.0.1:18080/
+```
+
+开发前端时，可另开 PowerShell 使用 Vite 热更新：
+
+```powershell
+Set-Location 'D:\code\Program\毕设\frontend'
+npm ci
+npm run dev
+# 浏览器打开 http://127.0.0.1:5173/
+```
+
+Vite 只绑定 `127.0.0.1:5173`，`/api` 转发到 `127.0.0.1:18080`。页面提供双库连通与表元数据、任务创建、启动/暂停/继续/停止、真实复制检查点与事件积压、最近校验报告。隐藏浏览器标签时暂停 3 秒轮询；不保存数据库密码或行值，不把主键范围当成复制百分比。屏幕最窄 375px 无横向滚动。
+
+准备可重复的三行演示表（脚本只 `CREATE IF NOT EXISTS` / `INSERT IGNORE`，不会删除既有数据）：
+
+```powershell
+& 'D:\code\Program\毕设\tests\fixtures\load-demo.ps1'
+```
+
+然后在页面选择 `databridge_source.demo_items` → `business.demo_items`，创建并启动任务。等待“持续同步”后停止源端写入，运行校验，报告应显示三行一致。**目标表必须为空才能创建新任务**；本机演示已创建过任务时，直接打开既有任务，不要重复建同名目标任务。实测在页面完成创建、启动、暂停、继续与两次一致性校验；源表更新后目标值通过 CDC 可见。桌面/375px 审计均为 0 个自动检测违规项（另有 3 个装饰箭头需要人工复核对比度）。
+
+前端验证：
+
+```powershell
+Set-Location 'D:\code\Program\毕设\frontend'
+npm test
+npm run build
+```
+
+## 尚待论文阶段完成
+
+已完成的是第一阶段单机单表实现与开发期预实验；还需要按[选题方案 v3](docs/proposals/databridge-proposal-v3.md)固定资源、至少三次运行 1 万/10 万/100 万行全量性能、CDC 延迟及三故障窗口实验，整理原始结果/图表，并完成论文正文与答辩材料。共享 `RowMapper` 的代码去重也尚未完成；目前全量和 CDC 类型边界由各自测试保证，不应把当前实现描述为通用异构迁移平台。
