@@ -24,7 +24,12 @@
 | `backend/src/test/java/com/databridge/verify/` | 校验器类型边界、真实双库差异与源端写入竞争测试；测试容器结束即清理 |
 | `backend/target/` | Maven 构建输出，不纳入版本控制；可由 `mvn clean` 重建 |
 | `backend/*.ps1` | 本地开发与验证入口；脚本只读未跟踪凭据，不输出密码 |
-| `frontend/` | Vue 管理界面源码和前端构建文件；核心链路通过后再创建 |
+| `frontend/` | Vue 3 + Vite 管理界面项目根目录；`package.json`/`package-lock.json` 锁定依赖，`index.html` 是入口 |
+| `frontend/src/` | 前端单页入口 `main.js`、`App.vue`、`styles.css`；组件文件用 PascalCase，业务函数用 camelCase |
+| `frontend/src/components/` | 任务表单、状态/进度和报告展示等可独立测试的 Vue 组件；与页面同生命周期，无生成文件 |
+| `frontend/src/api/` | 本机 HTTP 客户端和纯数据变换；不存凭据，文件名用小写 kebab-case，随源码保留 |
+| `frontend/tests/` | Vitest 单元与组件测试，文件用 `*.test.js`；临时覆盖率产物不提交 |
+| `frontend/node_modules/`、`frontend/dist/` | npm 安装与 Vite 构建输出，不纳入版本控制，可重建清理 |
 | `infra/` | Docker Compose、数据库初始化脚本、示例环境变量和固定镜像版本配置 |
 | `infra/mysql/init/` | MySQL 首次初始化时执行的最小 SQL 脚本；改动只影响新建数据卷，旧卷需显式迁移 |
 | `tests/fixtures/` | 小而确定的 SQL 测试数据及故障注入脚本 |
@@ -53,6 +58,7 @@
 - 首版 `TaskCoordinator` 每实例只运行一个任务，进程内同一任务只允许一个运行器；跨进程并发运行尚无数据库 fencing，部署必须保证单个后端进程。暂停返回后不得再启动新的复制/回放批次，CDC 继续入日志；停止等待运行器和 Engine 退出。
 - 任务失败仅持久化异常类型链和 SQLState，不持久化原始异常文本、连接串或密码。
 - 首版 HTTP API 只绑定 `127.0.0.1`，未实现身份认证，不向局域网或公网暴露；响应不得包含数据库密码、JDBC URL 或原始异常文本。
+- 管理界面只消费本机 API，不在浏览器存数据库密码；任务进度以真实持久化检查点和事件游标为准，不用稀疏主键范围伪装完成百分比。页面轮询在隐藏标签或卸载后暂停，不把 `INCONCLUSIVE` 显示成一致。
 - 首版时间映射固定为：MySQL `DATETIME` 按无时区墙上时间写入 PostgreSQL `timestamp without time zone`；MySQL `TIMESTAMP` 在源连接会话设为 UTC 后，按 UTC 墙上时间写入同类目标列。任务创建时须拒绝不同的目标时间列类型；未来 `RowMapper` 需让 CDC 与全量路径采用同一语义。
 - 只在源端停止写入、CDC 追平后进行确定性一致性校验；在线校验属于扩展研究。
 - 校验前后各写一次同任务探针并等待应用游标越过探针；若两个探针之间有业务 CDC 事件，报告为 `INCONCLUSIVE`，不得宣称一致或差异确定。差异报告只保存行主键与不一致列名，不保存业务字段原值。
