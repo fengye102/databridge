@@ -16,6 +16,7 @@
 - [全量通道正式实验报告](experiments/full-copy-report.md)、[逐次 CSV](experiments/full-copy-runs.csv)、[六组汇总](experiments/full-copy-summary.csv)
 - [CDC 延迟正式实验报告](experiments/cdc-latency-report.md)、[300 条逐次 CSV](experiments/cdc-latency-runs.csv)、[分位数汇总](experiments/cdc-latency-summary.csv)、[ECDF 图](experiments/figures/cdc-latency-ecdf.png)
 - [三故障窗口恢复实验报告](experiments/fault-recovery-report.md)、[9 条逐次 CSV](experiments/fault-recovery-runs.csv)、[分组汇总](experiments/fault-recovery-summary.csv)
+- [毕业设计 Word 技术内容稿](docs/thesis/databridge-thesis-content-draft.docx)（15 页，仅内容排版；待本人学校正式模板）
 - [毕业设计正文技术草稿](docs/thesis/databridge-thesis-draft.md)、[测试证据对照](docs/thesis/test-evidence-matrix.md)、[答辩提纲](docs/thesis/defense-outline.md)
 - [本地双库环境设计](docs/superpowers/specs/2026-10-18-databridge-local-infra-design.md)
 - [历史选题方案 v2](基于_Spring_Boot_的异构数据库迁移与增量同步平台的设计与实现_v2.md)
@@ -150,4 +151,4 @@ npm run build
 
 ## 尚待论文阶段完成
 
-第一阶段单机单表实现及三类正式实验已完成。全量性能的完整方法、18 条逐次测量和图表见[全量实验报告](experiments/full-copy-report.md)：100 万行在批次 500/1000 下的中位耗时分别为 344.829 秒和 264.094 秒，**不含 CDC 与校验耗时**。[CDC 延迟实验](experiments/cdc-latency-report.md)合并 300 条的可观察 P50/P95/P99 为 341.292/577.380/630.625 ms，包含源端提交调用与目标轮询误差。[故障恢复实验](experiments/fault-recovery-report.md)中 9 次强杀子 JVM 后均恢复至差异 0 行，但恢复耗时包含 JVM 启动及剩余工作量。当前论文仍是技术草稿，正式 DOCX 格式须按学校模板核对。全量 JDBC 与 CDC JSON 使用各自的输入适配，通过相同的目标 schema 契约和边界/端到端测试保证支持类型的结果；本项目不宣称通用异构迁移平台。
+第一阶段单机单表实现及三类正式实验已完成。全量性能的完整方法、18 条逐次测量和图表见[全量实验报告](experiments/full-copy-report.md)：100 万行在批次 500/1000 下的中位耗时分别为 344.829 秒和 264.094 秒，**不含 CDC 与校验耗时**。[CDC 延迟实验](experiments/cdc-latency-report.md)合并 300 条的可观察 P50/P95/P99 为 341.292/577.380/630.625 ms，包含源端提交调用与目标轮询误差。[故障恢复实验](experiments/fault-recovery-report.md)中 9 次强杀子 JVM 后均恢复至差异 0 行，但恢复耗时包含 JVM 启动及剩余工作量。[Word 技术内容稿](docs/thesis/databridge-thesis-content-draft.docx)由 Markdown 与三张已验证实验图生成；在 `docs/thesis/` 执行 `npm ci`、`npm run build` 可重建。它不是学校模板终稿，正式封面、声明和参考文献格式仍须按学校模板核对。全量 JDBC 与 CDC JSON 使用各自的输入适配，通过相同的目标 schema 契约和边界/端到端测试保证支持类型的结果；本项目不宣称通用异构迁移平台。

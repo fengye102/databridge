@@ -1,0 +1,13 @@
+{
+  "name": "databridge-thesis-export",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "node build-thesis-docx.mjs"
+  },
+  "dependencies": {
+    "docx": "9.6.1",
+    "marked": "17.0.5"
+  }
+}
