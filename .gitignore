@@ -6,6 +6,8 @@
 # Temporary runs and generated data
 /work/
 /experiments/raw/
+**/__pycache__/
+*.pyc
 
 # Java and frontend build outputs
 /backend/target/
