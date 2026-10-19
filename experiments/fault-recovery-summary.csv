@@ -1,0 +1,4 @@
+"scenario","trials","min_recovery_ms","median_recovery_ms","max_recovery_ms","max_difference_rows"
+"full_copy","3","14275.504","14420.392","14599.396","0"
+"cdc_persist","3","4217.761","4345.617","4400.976","0"
+"event_replay","3","4225.93","4230.957","4250.345","0"

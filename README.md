@@ -2,7 +2,7 @@
 
 基于 Spring Boot 的 MySQL → PostgreSQL 全量迁移与增量同步毕业设计项目。
 
-**当前阶段：CDC、全量复制、事件回放、任务状态机、本机 HTTP 入口、静默窗口校验及 Vue 管理界面已实现。** 核心链路采用“先捕获并持久化 CDC 事件、执行 JDBC 全量、再按序回放并持续同步”，避免迟到的全量批次覆盖新事件。当前后端回归 50 项通过、两个独立基准有意跳过；前端 9 项通过。全量通道的 18 次正式测量与 CDC 延迟的 3 × 100 次测量已完成，三个故障窗口的正式重复实验仍待执行。
+**当前阶段：CDC、全量复制、事件回放、任务状态机、本机 HTTP 入口、静默窗口校验及 Vue 管理界面已实现。** 核心链路采用“先捕获并持久化 CDC 事件、执行 JDBC 全量、再按序回放并持续同步”，避免迟到的全量批次覆盖新事件。当前完整后端回归 53 项发现、50 项通过、三个独立基准有意跳过；前端 9 项通过。全量 18 次、CDC 延迟 300 条、三个故障窗口各 3 次的正式实验均已完成；新增故障基准已在完整回归中确认默认跳过。
 
 ## 文档
 
@@ -15,6 +15,7 @@
 - [1 万行校验预实验记录](experiments/verification-10000.md)
 - [全量通道正式实验报告](experiments/full-copy-report.md)、[逐次 CSV](experiments/full-copy-runs.csv)、[六组汇总](experiments/full-copy-summary.csv)
 - [CDC 延迟正式实验报告](experiments/cdc-latency-report.md)、[300 条逐次 CSV](experiments/cdc-latency-runs.csv)、[分位数汇总](experiments/cdc-latency-summary.csv)、[ECDF 图](experiments/figures/cdc-latency-ecdf.png)
+- [三故障窗口恢复实验报告](experiments/fault-recovery-report.md)、[9 条逐次 CSV](experiments/fault-recovery-runs.csv)、[分组汇总](experiments/fault-recovery-summary.csv)
 - [毕业设计正文技术草稿](docs/thesis/databridge-thesis-draft.md)、[测试证据对照](docs/thesis/test-evidence-matrix.md)、[答辩提纲](docs/thesis/defense-outline.md)
 - [本地双库环境设计](docs/superpowers/specs/2026-10-18-databridge-local-infra-design.md)
 - [历史选题方案 v2](基于_Spring_Boot_的异构数据库迁移与增量同步平台的设计与实现_v2.md)
@@ -149,4 +150,4 @@ npm run build
 
 ## 尚待论文阶段完成
 
-第一阶段单机单表实现及全量、CDC 延迟正式实验已完成。全量性能的完整方法、18 条逐次测量和图表见[全量实验报告](experiments/full-copy-report.md)：100 万行在批次 500/1000 下的中位耗时分别为 344.829 秒和 264.094 秒，**不含 CDC 与校验耗时**。[CDC 延迟实验](experiments/cdc-latency-report.md)合并 300 条的可观察 P50/P95/P99 为 341.292/577.380/630.625 ms，包含源端提交调用与目标轮询误差，不是纯 Binlog 传输延迟。还需要按[选题方案 v3](docs/proposals/databridge-proposal-v3.md)执行三个故障窗口的重复实验；当前论文只是技术草稿，正式 DOCX 格式仍须按学校模板核对。共享 `RowMapper` 的代码去重尚未完成；目前全量和 CDC 类型边界由各自测试保证，不应把当前实现描述为通用异构迁移平台。
+第一阶段单机单表实现及三类正式实验已完成。全量性能的完整方法、18 条逐次测量和图表见[全量实验报告](experiments/full-copy-report.md)：100 万行在批次 500/1000 下的中位耗时分别为 344.829 秒和 264.094 秒，**不含 CDC 与校验耗时**。[CDC 延迟实验](experiments/cdc-latency-report.md)合并 300 条的可观察 P50/P95/P99 为 341.292/577.380/630.625 ms，包含源端提交调用与目标轮询误差。[故障恢复实验](experiments/fault-recovery-report.md)中 9 次强杀子 JVM 后均恢复至差异 0 行，但恢复耗时包含 JVM 启动及剩余工作量。当前论文仍是技术草稿，正式 DOCX 格式须按学校模板核对。共享 `RowMapper` 的代码去重尚未完成；目前全量和 CDC 类型边界由各自测试保证，不应把当前实现描述为通用异构迁移平台。
