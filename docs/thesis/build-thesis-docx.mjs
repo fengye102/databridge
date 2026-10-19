@@ -82,6 +82,7 @@ function table(token) {
     width: { size: totalWidth, type: WidthType.DXA }, columnWidths: widths,
     rows: allRows.map((row, rowIndex) => new TableRow({
       tableHeader: rowIndex === 0,
+      cantSplit: true,
       children: row.map((cell, column) => new TableCell({
         width: { size: widths[column], type: WidthType.DXA },
         shading: rowIndex === 0 ? { type: ShadingType.CLEAR, fill: 'E8EDF3' } : undefined,
@@ -89,6 +90,7 @@ function table(token) {
         children: [new Paragraph({
           alignment: cell.align === 'right' ? AlignmentType.RIGHT : AlignmentType.LEFT,
           children: inline(cell.tokens, rowIndex === 0 ? { bold: true } : {}),
+          keepNext: rowIndex < allRows.length - 1,
           spacing: { after: 0, line: 240 },
         })],
       })),
@@ -128,6 +130,7 @@ for (const token of tokens) {
       children.push(...pngParagraph(token.tokens[0]));
     } else {
       children.push(new Paragraph({ style: 'Normal', children: inline(token.tokens),
+        keepNext: /^表\s+\d+[—-]\d+/.test(token.text),
         indent: { firstLine: 420 }, spacing: { after: 130, line: 360 } }));
     }
   } else if (token.type === 'blockquote') {

@@ -42,6 +42,7 @@
 | `docs/superpowers/plans/` | 与设计一一对应的实施计划 |
 | `docs/screenshots/` | 只保存不含凭据/业务原值的固定演示截图，文件名说明页面与视口；更新界面后替换旧截图，不堆积过时版本 |
 | `docs/thesis/` | 毕业设计正文草稿和章节材料；`databridge-thesis-draft.md` 是可审查的内容源，`build-thesis-docx.mjs` 从该源和已提交的 PNG 图生成 `databridge-thesis-content-draft.docx`；不填写未经确认的学校封面、作者、导师或声明，得到学校模板后另行排正式版；只写本项目已验证的事实，定稿后归档旧稿而不混入代码目录 |
+| `docs/thesis/render-data-flow.py`、`databridge-data-flow.png` | 正文第 3 章数据流图的可复现绘图脚本及同名 PNG；图示只表达代码已实现的单表数据路径；修改架构后同名重建，不保留过时图；PNG 随正文提交 |
 | `docs/thesis/package.json`、`package-lock.json` | Word 内容稿生成器的固定 Node 依赖版本，随脚本保留，复现时在 `docs/thesis/` 运行 `npm ci` |
 | `docs/thesis/node_modules/` | Word 生成器的 npm 安装输出，不纳入版本控制，可由锁文件重建并在核对路径后清理 |
 | `work/` | 可删除的运行日志、临时导出和实验中间文件；不作为交付物 |
@@ -94,4 +95,4 @@
 
 - 原始文档为项目根目录的 `基于_Spring_Boot_的异构数据库迁移与增量同步平台的设计与实现_v2.md`。
 - 已建立公开 Git 仓库 `fengye102/databridge`；2026-10-19 用户确认开始按核心链路设计实施。先验证真实 CDC 捕获、事件持久化、去重、顺序与恢复，再进入全量迁移；前端最后开发。
-- CDC 事件入库、持久就绪探针、FullCopyWorker、EventApplier、任务创建前校验、TaskCoordinator、本机 HTTP 运行入口、Verifier/报告 API 与 Vue 运维台已实现；当前完整回归为后端 53 项发现、50 项通过、三个独立基准有意跳过；前端 9 项测试、生产构建通过。本机演示已完成任务创建、启动、暂停、继续、源端更新后目标端 CDC 可见、两次一致校验；后端进程强制终止后重启，任务自动恢复 `STREAMING` 且历史报告保留。2026-10-20 全量通道正式实验已完成 3 规模 × 2 批次 × 3 次，共 18 条逐次数据；CDC 延迟独立正式实验已完成 3 轮 × 100 条，合并样本可观察 P50/P95/P99 为 341.292/577.380/630.625 ms；三个故障窗口各强杀子 JVM 三次，恢复后 9 次全行差异数均为 0。逐次数据、汇总和方法说明保存在 `experiments/`。毕业设计技术正文草稿、15 页 Word 内容稿与答辩提纲在 `docs/thesis/`。当前尚未完成学校模板格式的论文终稿；两条输入适配刻意分离，跨通道等价性由边界与端到端测试约束。依赖版本记录：本机 JDK 23.0.2、Maven 3.9.16；后端按 Java 21 编译，Spring Boot 3.5.16、Debezium 3.7.0.Final；数据库 MySQL 8.4.11、PostgreSQL 17.11；前端 Node.js 24.18.0、npm 11.16.0、Vue 3.5.44、Vite 8.3.4、Element Plus 2.14.7。
+- CDC 事件入库、持久就绪探针、FullCopyWorker、EventApplier、任务创建前校验、TaskCoordinator、本机 HTTP 运行入口、Verifier/报告 API 与 Vue 运维台已实现；当前完整回归为后端 53 项发现、50 项通过、三个独立基准有意跳过；前端 9 项测试、生产构建通过。本机演示已完成任务创建、启动、暂停、继续、源端更新后目标端 CDC 可见、两次一致校验；后端进程强制终止后重启，任务自动恢复 `STREAMING` 且历史报告保留。2026-10-20 全量通道正式实验已完成 3 规模 × 2 批次 × 3 次，共 18 条逐次数据；CDC 延迟独立正式实验已完成 3 轮 × 100 条，合并样本可观察 P50/P95/P99 为 341.292/577.380/630.625 ms；三个故障窗口各强杀子 JVM 三次，恢复后 9 次全行差异数均为 0。逐次数据、汇总和方法说明保存在 `experiments/`。毕业设计技术正文草稿已扩写到约 2.25 万字符；可重建的 Word 内容稿经本机 Word 导出检查为 23 页，包含数据流图和三张实验图；答辩提纲亦在 `docs/thesis/`。当前尚未完成学校模板格式的论文终稿；两条输入适配刻意分离，跨通道等价性由边界与端到端测试约束。依赖版本记录：本机 JDK 23.0.2、Maven 3.9.16；后端按 Java 21 编译，Spring Boot 3.5.16、Debezium 3.7.0.Final；数据库 MySQL 8.4.11、PostgreSQL 17.11；前端 Node.js 24.18.0、npm 11.16.0、Vue 3.5.44、Vite 8.3.4、Element Plus 2.14.7。
