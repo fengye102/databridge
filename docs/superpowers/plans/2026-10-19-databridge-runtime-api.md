@@ -52,7 +52,7 @@
 ### Task 3: 本地运行与交付
 
 - [x] 用现有 Docker Compose 双库、未跟踪 `infra/.env` 启动后端；本机 `GET /api/tasks/{unknown}` 实际返回安全 404，`netstat` 确认仅监听 `127.0.0.1:8080`。
-- [ ] 更新 README/Codex 当前状态；执行 `git diff --check`、全量测试；提交并推送独立分支，创建以 `codex/task-coordinator` 为 base 的堆叠 PR。
+- [x] 更新 README/Codex 当前状态；`git diff --check` 无空白错误；45 项测试通过；提交 `fe2f14f`，推送 `codex/runtime-api` 并创建堆叠 PR #5。
 
 ## Exit Gate
 
