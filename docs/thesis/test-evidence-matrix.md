@@ -9,7 +9,7 @@
 | 全量批次与检查点 | `FullCopyWorkerIT.copiesSignedSparseKeysWithoutExtendingHighWatermark`、`rollsBackEntireBatchAndRetriesFromUnchangedCheckpoint`、`failedLaterBatchKeepsEarlierCommittedCheckpoint` | 固定上界、稀疏键和事务性检查点在真实双库成立 |
 | 全量期间源端变化后最终状态 | `EndToEndSyncIT.copyThenReplayOverwritesOldValuesAndPreservesDeletes` | 测试场景覆盖插入、更新、删除的衔接，不代表任意并发时序的形式化证明 |
 | 回放顺序、应用游标和失败重试 | `EventApplierIT.replaysInSequenceWithIdempotentCursorAndDelete`、`failedSecondEventRollsBackRowsAndCursorThenRetries` | 目标行与游标同事务，失败批次可重试 |
-| 类型边界与错误拒绝 | `FullCopyWorkerIT` 类型拒绝用例、`EventApplierIT.preservesBoundaryValuesAndRejectsMalformedRow`、`TaskPreflightIT` 结构拒绝用例 | 当前限定类型的成功/失败路径有证据，不能称支持任意异构类型 |
+| 类型边界与错误拒绝 | `FullCopyWorkerIT` 类型拒绝及边界用例、`EventApplierIT.preservesBoundaryValuesAndRejectsMalformedRow`、`EndToEndSyncIT.copyThenReplayOverwritesOldValuesAndPreservesDeletes`、`TaskPreflightIT` 结构拒绝用例 | JDBC 与 JSON 分别适配，支持类型写入共同的目标 schema；边界样本与真实衔接均有证据，但未形式化证明所有值等价，也不能称支持任意异构类型 |
 | 任务控制与恢复 | `TaskCoordinatorIT.pausesCaptureContinuesAndRestartResumesFromDurableState`、`TaskRecoveryTest` 两个用例 | 单进程状态机和持久恢复有证据；没有跨进程 fencing |
 | 进程强杀后的三个故障窗口 | 显式 `FaultRecoveryBenchmarkIT`；[9 次原始结果](../../experiments/fault-recovery-runs.csv)及[实验报告](../../experiments/fault-recovery-report.md) | 已推进的全量检查点、已入库但未应用事件、被目标行锁阻塞的应用事务各 3 次恢复后差异为 0；不覆盖任意故障点或数据库自身宕机 |
 | 校验正确、检出三类差异、竞争时不误报 | `VerifierIT.reportsQuietConsistencyAndPersistsOnlyDifferenceMetadata`、`scansTenThousandRowsAndRejectsAWriteInsideTheProbeWindow`、`reportsInconclusiveWhenProbeCannotBeCapturedOrApplied` | 静默窗口的确定性报告及 `INCONCLUSIVE` 路径成立；不是在线一致性保证 |
