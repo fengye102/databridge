@@ -1,6 +1,6 @@
 # DataBridge 核心链路设计
 
-> 状态：待书面确认；确认后才进入实施计划与代码阶段。
+> 状态：2026-10-19 用户确认开始按本设计实施；分阶段验收，不视为所有功能已完成。
 > 对应范围：`docs/proposals/databridge-proposal-v3.md`。
 > 设计日期：2026-10-18。
 
@@ -25,14 +25,14 @@
 1. 源库 MySQL 开启 Binlog，`binlog_format=ROW`、`binlog_row_image=FULL`，并为最长全量时间、可能停机时间与恢复时间留出足够保留期。[Debezium MySQL 前置条件](https://debezium.io/documentation/reference/stable/connectors/mysql.html)
 2. 源表有唯一且不可变的单列有符号 BIGINT 主键。任务建立时校验主键、字段类型和目标表结构；目标表必须为空且主键或唯一约束足以支持 UPSERT。
 3. 同步期间不执行 DDL，不更改源表主键。运行时检测到无法解释的 schema 事件或主键变更时置为 `FAILED`，不跳过并推进位点。
-4. 源端、目标端默认时区及时间精度记录在任务配置中。首版支持 BIGINT、INTEGER、VARCHAR/TEXT、DECIMAL、DATETIME、TIMESTAMP、JSON 和 NULL；不支持的类型在建任务时拒绝。
+4. 首版时间映射固定为 MySQL `DATETIME` 无时区墙上时间、MySQL `TIMESTAMP` 源连接 UTC 会话后的 UTC 墙上时间，均写入 PostgreSQL `timestamp without time zone`；微秒精度保持。任务配置记录源端与目标端的实际时区设置。首版支持 BIGINT、INTEGER、VARCHAR/TEXT、DECIMAL、DATETIME、TIMESTAMP、JSON 和 NULL；不支持的类型在建任务时拒绝。
 5. 目标业务表的触发器、外键副作用不在首版保证范围。开发与演示环境由 Compose 固定数据库版本。
 6. 数据源连接串与密码从环境变量注入，任务只保存数据源配置标识，不保存明文密码；界面只选择预配置数据源。
 
 ## 4. 组件责任
 
 - `TaskCoordinator`：唯一任务状态机，校验、启动、暂停、恢复、停止和失败处理。状态为 `CREATED → CAPTURING → COPYING → REPLAYING → STREAMING`；`PAUSED` 保留原阶段，`FAILED` 保留错误原因和可恢复信息。
-- `CdcCapture`：配置一个 MySQL Debezium Engine，首次启动用 `snapshot.mode=no_data`；使用 PostgreSQL 的持久化 offset 与 schema-history 存储；将业务源表的行变更按接收顺序写入事件日志。集成测试额外捕获专用 `sync_probe` 表。`schema_only` 已弃用。[Debezium MySQL 快照模式](https://debezium.io/documentation/reference/stable/connectors/mysql.html)
+- `CdcCapture`：配置一个 MySQL Debezium Engine，首次启动用 `snapshot.mode=no_data`；使用 PostgreSQL 的持久化 offset 与 schema-history 存储；将业务源表及专用 `sync_probe` 表的行变更按接收顺序写入事件日志。`schema_only` 已弃用。[Debezium MySQL 快照模式](https://debezium.io/documentation/reference/stable/connectors/mysql.html)
 - `FullCopyWorker`：从已固定的高水位以下按主键读取，转换后批量 UPSERT；数据和检查点同事务提交。它不读取事件日志，也不在 `REPLAYING` 或 `STREAMING` 状态运行。
 - `EventApplier`：按事件日志序列号应用 INSERT/UPDATE 的最终行值和 DELETE；业务写入与应用游标同事务提交。它不在 `COPYING` 状态运行。
 - `RowMapper`：对 JDBC 行与 Debezium 行变更产生相同的目标列值，单元测试用同一组类型边界样本验证。
@@ -58,7 +58,7 @@
 ## 6. 启动、全量与衔接时序
 
 1. 创建任务时检查 MySQL/PG 连接、表结构、源主键、目标空表、目标唯一约束和无同表运行任务。
-2. 启动 `CdcCapture`，等待 Debezium 初始 `no_data` schema 快照完成并进入 Binlog 捕获阶段，确认 offset/schema-history 可持久化，再进入 `COPYING`。启动 Engine 对象本身不视为就绪；集成测试使用快照完成通知或等效可观测状态验证就绪。[Debezium 快照通知](https://debezium.io/documentation/reference/stable/configuration/notification.html)
+2. 启动 `CdcCapture`，等待 Debezium 初始 `no_data` schema 快照 `COMPLETED`（恢复时可能 `SKIPPED`）通知。真实双库测试证明新任务此时 JDBC offset 表仍为空，故不能立刻复制。每任务唯一 `topic.prefix` 的 Engine 同时捕获业务表和源库预置 `sync_probe(id BIGINT AUTO_INCREMENT PRIMARY KEY, marker CHAR(36))`；**每次启动或恢复**收到通知后，用只对该表额外有 INSERT 权限的 CDC 账号写入新的 UUID 标记，等待该标记事件入库且本任务 JDBC offset 存在，证明当前 Engine 已实际捕获，之后才能进入 `COPYING` 或恢复原阶段。探针事件应用时只推进游标。超时、`ABORTED`、缺表/权限或 Engine 错误均失败；不以固定休眠或其他任务的 offset 代替。[Debezium 3.7 快照通知](https://debezium.io/documentation/reference/3.7/configuration/notification.html)
 3. 在 CDC 就绪后查询 `MAX(id)`，写入 `full_checkpoint.high_watermark`；空表以完成全量处理。此后插入的行即使主键落在高水位以下，也由 CDC 回放覆盖。
 4. 全量每批执行 `WHERE id > :last_id AND id <= :high_watermark ORDER BY id LIMIT :batch_size`。以**本批最后实际读取的主键**推进检查点；空结果即完成。数据写入与检查点更新在一个 PostgreSQL 事务。
 5. 全量完成标志持久化后进入 `REPLAYING`。按 `sequence > event_cursor.sequence ORDER BY sequence` 读取事件，逐批应用；每批业务写入与游标同事务提交。未知类型、损坏事件或目标写入失败时暂停应用并记录 `FAILED`，游标不越过失败事件。
